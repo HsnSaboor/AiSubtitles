@@ -3,4 +3,5 @@ pytubefix
 youtube-transcript-api
 google_trans_new
 groq
+googletrans 
 pydub
