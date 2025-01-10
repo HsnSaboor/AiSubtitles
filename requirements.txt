@@ -1,6 +1,9 @@
 streamlit
+pytube
 yt-dlp
+youtube-dl
 pydub
-groq
 deep-translator
 youtube-transcript-api
+groq
+ffmpeg-python
