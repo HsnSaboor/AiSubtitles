@@ -98,7 +98,7 @@ def transcribe_chunk(chunk_path, start_time, language="tr"):
     with open(chunk_path, "rb") as file:
         transcription = client.audio.transcriptions.create(
             file=(chunk_path, file.read()),
-            model="whisper-large-v3-turbo",
+            model="whisper-large-v3",
             language=language,
             response_format="verbose_json"
         )
