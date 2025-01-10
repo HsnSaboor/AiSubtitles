@@ -6,6 +6,7 @@ from pydub import AudioSegment
 from groq import Groq
 from googletrans import Translator
 from youtube_transcript_api import YouTubeTranscriptApi
+import asyncio
 
 # Suppress SyntaxWarnings
 import warnings
