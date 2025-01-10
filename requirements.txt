@@ -1,6 +1,6 @@
 streamlit
 pytubefix
 youtube-transcript-api
-google-trans-new
+async-google-trans-new
 groq
 pydub
