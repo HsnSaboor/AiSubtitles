@@ -1,7 +1,7 @@
 import streamlit as st
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 import re
-from translator import translate_srt_to_urdu_async, run_async_task
+from translator import translate_srt_to_urdu
 
 def extract_video_id(url):
     """
@@ -70,23 +70,9 @@ def main():
                 srt_content = convert_to_srt(transcript_data)
                 st.text_area("Original SRT Content", srt_content, height=300)
 
-                # Progress bar for translation
-                progress_bar = st.progress(0)
-                progress_text = st.empty()
-
-                def update_progress(progress):
-                    progress_bar.progress(int(progress * 100))
-                    progress_text.text(f"Translation Progress: {int(progress * 100)}%")
-
-                # Asynchronously translate the SRT content to Urdu
-                translated_srt_content = run_async_task(
-                    translate_srt_to_urdu_async(srt_content, update_progress)
-                )
+                # Translate the SRT content to Urdu
+                translated_srt_content = translate_srt_to_urdu(srt_content)
                 st.text_area("Translated SRT Content (Urdu)", translated_srt_content, height=300)
-
-                # Clear progress bar
-                progress_bar.empty()
-                progress_text.empty()
 
                 st.download_button(
                     label="Download Original SRT File",
