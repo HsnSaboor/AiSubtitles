@@ -1,8 +1,8 @@
 import os
 import json
-import logging
 from groq import Groq
 from typing import List
+import time
 
 # Get the Groq API key from the environment variable
 groq_api_key = os.getenv('GROQ_API_KEY')
@@ -26,8 +26,20 @@ You should also format the output as JSON with the following structure:
 }
 """
 
-# Initialize logging
-logging.basicConfig(level=logging.INFO)
+# Estimate the number of tokens in the system prompt
+system_prompt_tokens = len(system_prompt.split())
+
+# Define the maximum tokens per request
+max_tokens_per_request = 6000
+
+# Calculate the available tokens for input text
+available_tokens_for_input = max_tokens_per_request - system_prompt_tokens
+
+# Define the number of chunks to process per minute
+chunks_per_minute = 3
+
+# Calculate the maximum tokens per chunk
+max_tokens_per_chunk = available_tokens_for_input // chunks_per_minute
 
 def create_chunks(srt_data: List[str], chunk_size: int) -> List[List[str]]:
     """
@@ -62,11 +74,11 @@ def translate_srt_to_urdu(srt_data: str) -> str:
     """
     # Split SRT into lines and chunks
     srt_lines = srt_data.splitlines()
-    chunks = create_chunks(srt_lines, chunk_size=5000)  # Allow 25K tokens for the chunk
+    chunks = create_chunks(srt_lines, chunk_size=max_tokens_per_chunk)  # Allow chunk size based on available tokens
     
     translated_subtitles = []
     
-    for idx, chunk in enumerate(chunks):
+    for chunk in chunks:
         # Prepare the request payload
         messages = [
             {"role": "system", "content": system_prompt},
@@ -74,33 +86,28 @@ def translate_srt_to_urdu(srt_data: str) -> str:
         ]
         
         # Send the request to Groq API for translation
-        try:
-            chat_completion = client.chat.completions.create(
-                messages=messages,
-                model="llama-3.3-70b-versatile",
-                temperature=0.3,
-                max_tokens=8192,
-                top_p=1,
-                stream=False,
-                response_format={"type": "json_object"}
-            )
-
-            # Parse the JSON response and append it to the result
-            response = chat_completion.choices[0].message.content
-            translated_subtitles.append(json.loads(response)["subtitles"])
-            
-            logging.info(f"Processed chunk {idx + 1} out of {len(chunks)}")
-
-        except Exception as e:
-            logging.error(f"Error processing chunk {idx + 1}: {e}")
-            continue
-
+        chat_completion = client.chat.completions.create(
+            messages=messages,
+            model="llama-3.3-70b-versatile",
+            temperature=0.5,
+            max_tokens=8192,
+            top_p=1,
+            stream=False,
+            response_format={"type": "json_object"}
+        )
+        
+        # Parse the JSON response and append it to the result
+        response = chat_completion.choices[0].message.content
+        translated_subtitles.append(json.loads(response)["subtitles"])
+        
+        # Sleep to adhere to the rate limit of 3 requests per minute
+        time.sleep(20)  # Sleep for 20 seconds between requests
+    
     # Flatten the list of translated subtitles
     all_translated_subtitles = [item for sublist in translated_subtitles for item in sublist]
     
     # Convert the translated subtitles back to SRT format
     translated_srt = ""
-
     for subtitle in all_translated_subtitles:
         translated_srt += f"{subtitle['index']}\n"
         translated_srt += f"{subtitle['start']} --> {subtitle['end']}\n"
