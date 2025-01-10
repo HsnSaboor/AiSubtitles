@@ -1,0 +1,10 @@
+ffmpeg
+python3-pip
+python3-dev
+libssl-dev
+libffi-dev
+libxml2-dev
+libxslt1-dev
+zlib1g-dev
+libjpeg-dev
+libpng-dev
