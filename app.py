@@ -2,11 +2,14 @@ import os
 import subprocess
 import streamlit as st
 from pytube import YouTube
-YouTube.bypass_age_gate = True
 from pydub import AudioSegment
 from groq import Groq
 from googletrans import Translator
 from youtube_transcript_api import YouTubeTranscriptApi
+
+# Suppress SyntaxWarnings
+import warnings
+warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 # Initialize Groq client and Google Translator
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -23,6 +26,7 @@ def seconds_to_srt_time(seconds):
 # Function to download and convert audio
 def download_and_convert_audio(url, output_path):
     yt = YouTube(url)
+    yt.bypass_age_gate = True  # Fix: Set the property, don't call it
     audio_stream = yt.streams.filter(only_audio=True).first()
     default_filename = audio_stream.default_filename
     audio_path = os.path.join(output_path, default_filename)
