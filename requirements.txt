@@ -1,0 +1,6 @@
+streamlit
+pytube
+pydub
+groq
+googletrans
+youtube-transcript-api
