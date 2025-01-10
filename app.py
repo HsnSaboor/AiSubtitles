@@ -12,7 +12,7 @@ def extract_video_id(url):
     if video_id_match:
         return video_id_match.group(1)
     else:
-        st.error("Invalid YouTube URL.")
+        st.error("Invalid YouTube URL. Please ensure the URL is correct.")
         return None
 
 def fetch_transcript(video_id):
