@@ -2,9 +2,11 @@ import os
 import subprocess
 import streamlit as st
 from pytube import YouTube
+YouTube.bypass_age_gate = True
 from pydub import AudioSegment
 from groq import Groq
 from googletrans import Translator
+from youtube_transcript_api import YouTubeTranscriptApi
 
 # Initialize Groq client and Google Translator
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
