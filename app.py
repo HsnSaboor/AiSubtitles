@@ -61,8 +61,6 @@ def download_audio_ytdlp(url, output_path):
                 'preferredcodec': 'flac',
                 'preferredquality': '192',
             }],
-            'cookiefile': 'cookies.txt',  # Use cookies to avoid 403 errors
-            'proxy': '',  # Remove proxy if not needed
         }
         with YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=True)
