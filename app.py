@@ -3,8 +3,7 @@ import os
 from pytubefix import YouTube
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
-from async_google_trans_new import AsyncTranslator
-import asyncio
+from google_trans_new import google_translator
 from groq import Groq
 from pydub import AudioSegment
 
@@ -26,7 +25,7 @@ def main():
                     if transcript:
                         st.write("Non-auto-generated subtitles found. Translating to Urdu...")
                         # Step 2: Translate subtitles to Urdu
-                        translated_subtitles = asyncio.run(translate_subtitles_to_urdu(transcript))
+                        translated_subtitles = translate_subtitles_to_urdu(transcript)
                         # Step 3: Generate SRT file
                         srt_content = generate_srt(translated_subtitles)
                     else:
@@ -47,7 +46,7 @@ def main():
                             transcription_segments.extend(segments)
                         # Step 7: Translate transcription to Urdu
                         st.write("Translating to Urdu...")
-                        translated_segments = asyncio.run(translate_transcription_to_urdu(transcription_segments))
+                        translated_segments = translate_transcription_to_urdu(transcription_segments)
                         # Step 8: Generate SRT file
                         srt_content = generate_srt(translated_segments)
                 except Exception as e:
@@ -135,12 +134,12 @@ def transcribe_chunk(chunk_path, start_time):
         })
     return adjusted_segments
 
-async def translate_subtitles_to_urdu(subtitles):
-    """Translate subtitles to Urdu using async-google-trans-new."""
-    translator = AsyncTranslator()
+def translate_subtitles_to_urdu(subtitles):
+    """Translate subtitles to Urdu using google-trans-new."""
+    translator = google_translator()
     translated_subtitles = []
     for subtitle in subtitles:
-        translated_text = await translator.translate(subtitle['text'], 'ur')
+        translated_text = translator.translate(subtitle['text'], lang_tgt='ur')
         translated_subtitles.append({
             "start": subtitle['start'],
             "end": subtitle['start'] + subtitle['duration'],
@@ -148,12 +147,12 @@ async def translate_subtitles_to_urdu(subtitles):
         })
     return translated_subtitles
 
-async def translate_transcription_to_urdu(transcription_segments):
+def translate_transcription_to_urdu(transcription_segments):
     """Translate transcription segments to Urdu."""
-    translator = AsyncTranslator()
+    translator = google_translator()
     translated_segments = []
     for segment in transcription_segments:
-        translated_text = await translator.translate(segment['text'], 'ur')
+        translated_text = translator.translate(segment['text'], lang_tgt='ur')
         translated_segments.append({
             "start": segment['start'],
             "end": segment['end'],
