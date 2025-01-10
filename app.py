@@ -28,6 +28,7 @@ def seconds_to_srt_time(seconds):
 def download_audio_pytube(url, output_path):
     try:
         yt = YouTube(url)
+        yt.bypass_age_gate = True # Bypass age restriction
         audio_stream = yt.streams.filter(only_audio=True).first()
         default_filename = audio_stream.default_filename
         audio_path = os.path.join(output_path, default_filename)
@@ -61,6 +62,8 @@ def download_audio_ytdlp(url, output_path):
                 'preferredcodec': 'flac',
                 'preferredquality': '192',
             }],
+            'cookiefile': 'cookies.txt',  # Use cookies to avoid 403 errors
+            'proxy': '',  # Remove proxy if not needed
         }
         with YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=True)
