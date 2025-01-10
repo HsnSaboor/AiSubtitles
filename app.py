@@ -4,9 +4,8 @@ import streamlit as st
 from pytube import YouTube
 from pydub import AudioSegment
 from groq import Groq
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 from youtube_transcript_api import YouTubeTranscriptApi
-import asyncio
 
 # Suppress SyntaxWarnings
 import warnings
@@ -14,7 +13,7 @@ warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 # Initialize Groq client and Google Translator
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-translator = Translator()
+translator = GoogleTranslator(source='auto', target='ur')  # Set target language to Urdu
 
 # Helper function to convert seconds to SRT time format
 def seconds_to_srt_time(seconds):
@@ -140,8 +139,7 @@ def fetch_and_translate_subtitles(video_id, target_language="ur"):
             subtitles = non_auto_transcript.fetch()
             translated_subtitles = []
             for subtitle in subtitles:
-                # Use translator.translate synchronously
-                translated_text = translator.translate(subtitle["text"], dest=target_language).text
+                translated_text = translator.translate(subtitle["text"])
                 translated_subtitles.append({
                     "start": subtitle["start"],
                     "end": subtitle["start"] + subtitle["duration"],
@@ -195,7 +193,7 @@ def main():
                     # Translate all transcription texts to Urdu
                     translated_transcriptions = []
                     for segment in transcriptions:
-                        translated_text = translator.translate(segment["text"], dest="ur").text
+                        translated_text = translator.translate(segment["text"])
                         translated_transcriptions.append({
                             "start": segment["start"],
                             "end": segment["end"],
