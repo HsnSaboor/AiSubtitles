@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 # Initialize Groq client and Google Translator
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-translator = GoogleTranslator(source='auto', target='tr')  # Set target language to Turkish
+translator = GoogleTranslator(source='auto', target='ur')  # Set target language to Urdu
 
 # Helper function to convert seconds to SRT time format
 def seconds_to_srt_time(seconds):
@@ -144,7 +144,7 @@ def fetch_and_translate_subtitles(video_id, target_language="tr"):
 
 # Streamlit app
 def main():
-    st.title("YouTube Video to Turkish SRT Converter")
+    st.title("YouTube Video to Urdu SRT Converter")
     yt_url = st.text_input("Enter YouTube Video URL:")
     if yt_url:
         st.video(yt_url)
@@ -156,7 +156,7 @@ def main():
                 video_id = yt_url.split("v=")[1].split("&")[0]  # Extract video ID from URL
                 subtitles = fetch_and_translate_subtitles(video_id)
                 if subtitles:
-                    st.success("Non-auto-generated subtitles found! Translating to Turkish...")
+                    st.success("Non-auto-generated subtitles found! Translating to Urdu...")
                     generate_srt_file(subtitles, "output.srt")
                     st.success("SRT file generated successfully!")
                     st.download_button(
@@ -180,7 +180,7 @@ def main():
                             transcription = transcribe_chunk(chunk_path, start_time)
                             transcriptions.extend(transcription)
                     
-                    # Translate all transcription texts to Turkish
+                    # Translate all transcription texts to Urdu
                     translated_transcriptions = []
                     for segment in transcriptions:
                         translated_text = translator.translate(segment["text"])
