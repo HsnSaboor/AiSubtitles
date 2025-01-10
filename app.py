@@ -2,11 +2,6 @@ import streamlit as st
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 import re
 from translator import translate_srt_to_urdu
-from tqdm import tqdm  # Import tqdm for progress bar
-
-# Initialize logging
-import logging
-logging.basicConfig(level=logging.INFO)
 
 def extract_video_id(url):
     """
@@ -22,14 +17,14 @@ def extract_video_id(url):
 
 def fetch_transcript(video_id):
     try:
-        # Fetch the available transcripts for the video
+        # Fetch available transcripts for the video
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
-        # Check if manually created Turkish transcript exists
+        # Try to get a manually created Turkish transcript
         if 'tr' in transcript_list._manually_created_transcripts:
             transcript = transcript_list.find_manually_created_transcript(['tr'])
             st.success("Turkish manually created transcript found.")
-        # Check if manually created English transcript exists
+        # Try to get a manually created English transcript
         elif 'en' in transcript_list._manually_created_transcripts:
             transcript = transcript_list.find_manually_created_transcript(['en'])
             st.success("English manually created transcript found.")
@@ -37,10 +32,9 @@ def fetch_transcript(video_id):
             st.error("No manually created transcripts found in Turkish or English.")
             return None
 
-        # Fetch the transcript data
+        # Fetch the transcript data as a list of dictionary entries
         transcript_data = transcript.fetch()
 
-        # Return the transcript data (list of dictionaries)
         return transcript_data
 
     except TranscriptsDisabled:
@@ -54,6 +48,9 @@ def fetch_transcript(video_id):
         return None
 
 def convert_to_srt(transcript_data):
+    """
+    Converts the transcript data (a list of dictionaries) to an SRT formatted string.
+    """
     srt_content = ""
     for i, entry in enumerate(transcript_data):
         start = entry['start']
@@ -66,6 +63,9 @@ def convert_to_srt(transcript_data):
     return srt_content
 
 def format_time(seconds):
+    """
+    Converts seconds into the SRT time format (hh:mm:ss,SSS).
+    """
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     secs = int(seconds % 60)
@@ -82,16 +82,15 @@ def main():
             transcript_data = fetch_transcript(video_id)
 
             if transcript_data:
+                # Convert the transcript data to SRT format
                 srt_content = convert_to_srt(transcript_data)
                 st.text_area("Original SRT Content", srt_content, height=300)
 
                 # Translate the SRT content to Urdu
-                st.subheader("Translating to Urdu...")
-                with st.spinner("Processing Translation..."):
-                    translated_srt_content = translate_srt_to_urdu(srt_content)
-                
+                translated_srt_content = translate_srt_to_urdu(srt_content)
                 st.text_area("Translated SRT Content (Urdu)", translated_srt_content, height=300)
 
+                # Allow users to download both the original and translated SRT files
                 st.download_button(
                     label="Download Original SRT File",
                     data=srt_content,
