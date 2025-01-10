@@ -2,6 +2,11 @@ import streamlit as st
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 import re
 from translator import translate_srt_to_urdu
+from tqdm import tqdm  # Import tqdm for progress bar
+
+# Initialize logging
+import logging
+logging.basicConfig(level=logging.INFO)
 
 def extract_video_id(url):
     """
@@ -71,7 +76,10 @@ def main():
                 st.text_area("Original SRT Content", srt_content, height=300)
 
                 # Translate the SRT content to Urdu
-                translated_srt_content = translate_srt_to_urdu(srt_content)
+                st.subheader("Translating to Urdu...")
+                with st.spinner("Processing Translation..."):
+                    translated_srt_content = translate_srt_to_urdu(srt_content)
+                
                 st.text_area("Translated SRT Content (Urdu)", translated_srt_content, height=300)
 
                 st.download_button(
