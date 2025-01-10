@@ -1,7 +1,7 @@
 import streamlit as st
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 import re
-from translator import translate_srt_to_urdu
+
 
 def extract_video_id(url):
     """
@@ -86,9 +86,7 @@ def main():
                 srt_content = convert_to_srt(transcript_data)
                 st.text_area("Original SRT Content", srt_content, height=300)
 
-                # Translate the SRT content to Urdu
-                translated_srt_content = translate_srt_to_urdu(srt_content)
-                st.text_area("Translated SRT Content (Urdu)", translated_srt_content, height=300)
+                
 
                 # Allow users to download both the original and translated SRT files
                 st.download_button(
@@ -98,12 +96,7 @@ def main():
                     mime="text/plain"
                 )
 
-                st.download_button(
-                    label="Download Translated SRT File (Urdu)",
-                    data=translated_srt_content,
-                    file_name=f"{video_id}_transcript_urdu.srt",
-                    mime="text/plain"
-                )
+                
 
 if __name__ == "__main__":
     main()
