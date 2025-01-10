@@ -1,7 +1,7 @@
-import json
-import re
-from groq import Groq
 import os
+import json
+from groq import Groq
+from typing import List
 
 # Get the Groq API key from the environment variable
 groq_api_key = os.getenv('GROQ_API_KEY')
@@ -9,104 +9,89 @@ groq_api_key = os.getenv('GROQ_API_KEY')
 # Initialize the Groq client with the API key from the environment
 client = Groq(api_key=groq_api_key)
 
+# System prompt with instructions for the model
+system_prompt = """
+You are a translator for subtitle files. You must preserve the emotional tone of the sentences, correct character names, and handle cultural context properly.
+You should also format the output as JSON with the following structure:
+{
+    "subtitles": [
+        {
+            "index": int,
+            "start": str (time in "hh:mm:ss,SSS" format),
+            "end": str (time in "hh:mm:ss,SSS" format),
+            "text": str (translated Urdu subtitle)
+        }
+    ]
+}
+"""
 
-def chunk_srt(srt_content, chunk_size=5000):
+def create_chunks(srt_data: List[str], chunk_size: int) -> List[List[str]]:
     """
-    Chunk the SRT content into manageable pieces for translation.
-    Each chunk will have approximately 'chunk_size' tokens.
+    Split the SRT data into chunks of size `chunk_size` while preserving full lines.
     """
-    # Tokenize the SRT content
-    tokens = srt_content.split()
     chunks = []
     current_chunk = []
-    current_size = 0
-
-    for token in tokens:
-        current_chunk.append(token)
-        current_size += len(token)
-        if current_size >= chunk_size:
-            chunks.append(' '.join(current_chunk))
-            current_chunk = []
-            current_size = 0
-
+    current_token_count = 0
+    
+    for line in srt_data:
+        # Estimate token count per line (simple approximation)
+        token_count = len(line.split())
+        
+        # If adding this line exceeds the chunk size, store the current chunk and start a new one
+        if current_token_count + token_count > chunk_size:
+            chunks.append(current_chunk)
+            current_chunk = [line]
+            current_token_count = token_count
+        else:
+            current_chunk.append(line)
+            current_token_count += token_count
+    
+    # Append any remaining lines as the last chunk
     if current_chunk:
-        chunks.append(' '.join(current_chunk))
-
+        chunks.append(current_chunk)
+    
     return chunks
 
-def translate_chunk(chunk):
+def translate_srt_to_urdu(srt_data: str) -> str:
     """
-    Translate a single chunk of text using the Groq API.
+    Translates SRT file to Urdu using Groq's Llama-3.3-70B model.
     """
-    system_prompt = """
-    You are a highly accurate and sensitive translator. Your task is to translate Turkish subtitles into Urdu.
-    Please ensure that you:
-    - Preserve the emotions of the sentences (e.g., excitement, sadness).
-    - Keep the character names and dialogue intact without modifying them.
-    - Ensure that Urdu translation closely matches the emotional tone and context of the original Turkish text.
+    # Split SRT into lines and chunks
+    srt_lines = srt_data.splitlines()
+    chunks = create_chunks(srt_lines, chunk_size=25000)  # Allow 25K tokens for the chunk
     
-    You will receive Turkish subtitles in chunks. Translate them into Urdu while maintaining the original structure of the subtitles. 
-
-    The output format must be a JSON object with the following structure:
-    [
-        {
-            "index": <Subtitle index number>,
-            "time": "<Subtitle time range in SRT format>",
-            "text": "<Translated Urdu subtitle>"
-        },
-        ...
-    ]
-    """
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": chunk}
-        ],
-        response_format={"type": "json_object"}
-    )
+    translated_subtitles = []
     
-    return response.choices[0].message.content
-
-def translate_srt_to_urdu(srt_content):
-    """
-    Translate the entire SRT content from Turkish to Urdu.
-    """
-    # Chunk the SRT content
-    chunks = chunk_srt(srt_content)
-
-    translated_chunks = []
     for chunk in chunks:
-        translated_chunk = translate_chunk(chunk)
-        translated_chunks.append(translated_chunk)
-
-    # Reassemble the translated chunks into a single string
-    translated_srt = '\n'.join(translated_chunks)
+        # Prepare the request payload
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "\n".join(chunk)}
+        ]
+        
+        # Send the request to Groq API for translation
+        chat_completion = client.chat.completions.create(
+            messages=messages,
+            model="llama-3.3-70b-versatile",
+            temperature=0.5,
+            max_tokens=1024,
+            top_p=1,
+            stream=False,
+            response_format={"type": "json_object"}
+        )
+        
+        # Parse the JSON response and append it to the result
+        response = chat_completion.choices[0].message.content
+        translated_subtitles.append(json.loads(response)["subtitles"])
+    
+    # Flatten the list of translated subtitles
+    all_translated_subtitles = [item for sublist in translated_subtitles for item in sublist]
+    
+    # Convert the translated subtitles back to SRT format
+    translated_srt = ""
+    for subtitle in all_translated_subtitles:
+        translated_srt += f"{subtitle['index']}\n"
+        translated_srt += f"{subtitle['start']} --> {subtitle['end']}\n"
+        translated_srt += f"{subtitle['text']}\n\n"
+    
     return translated_srt
-
-def convert_srt_to_json(srt_content):
-    """
-    Convert SRT content to JSON format.
-    """
-    srt_json = []
-    lines = srt_content.strip().split('\n\n')
-    for line in lines:
-        parts = line.split('\n')
-        index = parts[0]
-        time = parts[1]
-        text = '\n'.join(parts[2:])
-        srt_json.append({
-            'index': index,
-            'time': time,
-            'text': text
-        })
-    return json.dumps(srt_json, ensure_ascii=False, indent=4)
-
-def convert_json_to_srt(srt_json):
-    """
-    Convert JSON format back to SRT content.
-    """
-    srt_content = ''
-    for item in srt_json:
-        srt_content += f"{item['index']}\n{item['time']}\n{item['text']}\n\n"
-    return srt_content.strip()
