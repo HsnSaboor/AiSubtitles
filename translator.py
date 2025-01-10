@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 from groq import Groq
 from typing import List
 
@@ -24,6 +25,9 @@ You should also format the output as JSON with the following structure:
     ]
 }
 """
+
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
 
 def create_chunks(srt_data: List[str], chunk_size: int) -> List[List[str]]:
     """
@@ -58,11 +62,11 @@ def translate_srt_to_urdu(srt_data: str) -> str:
     """
     # Split SRT into lines and chunks
     srt_lines = srt_data.splitlines()
-    chunks = create_chunks(srt_lines, chunk_size=25000)  # Allow 25K tokens for the chunk
+    chunks = create_chunks(srt_lines, chunk_size=5000)  # Allow 25K tokens for the chunk
     
     translated_subtitles = []
     
-    for chunk in chunks:
+    for idx, chunk in enumerate(chunks):
         # Prepare the request payload
         messages = [
             {"role": "system", "content": system_prompt},
@@ -70,25 +74,33 @@ def translate_srt_to_urdu(srt_data: str) -> str:
         ]
         
         # Send the request to Groq API for translation
-        chat_completion = client.chat.completions.create(
-            messages=messages,
-            model="llama-3.3-70b-versatile",
-            temperature=0.5,
-            max_tokens=1024,
-            top_p=1,
-            stream=False,
-            response_format={"type": "json_object"}
-        )
-        
-        # Parse the JSON response and append it to the result
-        response = chat_completion.choices[0].message.content
-        translated_subtitles.append(json.loads(response)["subtitles"])
-    
+        try:
+            chat_completion = client.chat.completions.create(
+                messages=messages,
+                model="llama-3.3-70b-versatile",
+                temperature=0.3,
+                max_tokens=8192,
+                top_p=1,
+                stream=False,
+                response_format={"type": "json_object"}
+            )
+
+            # Parse the JSON response and append it to the result
+            response = chat_completion.choices[0].message.content
+            translated_subtitles.append(json.loads(response)["subtitles"])
+            
+            logging.info(f"Processed chunk {idx + 1} out of {len(chunks)}")
+
+        except Exception as e:
+            logging.error(f"Error processing chunk {idx + 1}: {e}")
+            continue
+
     # Flatten the list of translated subtitles
     all_translated_subtitles = [item for sublist in translated_subtitles for item in sublist]
     
     # Convert the translated subtitles back to SRT format
     translated_srt = ""
+
     for subtitle in all_translated_subtitles:
         translated_srt += f"{subtitle['index']}\n"
         translated_srt += f"{subtitle['start']} --> {subtitle['end']}\n"
