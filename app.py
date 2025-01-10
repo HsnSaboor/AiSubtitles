@@ -1,6 +1,6 @@
 import streamlit as st
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 import re
 
 def extract_video_id(url):
@@ -39,10 +39,9 @@ def fetch_transcript(video_id):
         st.error(f"An error occurred: {e}")
 
 def translate_to_urdu(text):
-    translator = Translator()
     try:
-        translated = translator.translate(text, src='tr', dest='ur')
-        return translated.text
+        translated = GoogleTranslator(source='tr', target='ur').translate(text)
+        return translated
     except Exception as e:
         st.error(f"Translation error: {e}")
         return text
