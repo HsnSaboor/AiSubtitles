@@ -1,13 +1,12 @@
 import streamlit as st
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 import re
-from deep_translator import GoogleTranslator
+from translator import translate_srt_to_urdu_async, run_async_task
 
 def extract_video_id(url):
     """
     Extract the YouTube video ID from various URL formats.
     """
-    # Regular expression to match YouTube URL patterns
     video_id_match = re.match(
         r'(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|embed/|v/|.+\?v=)|youtu\.be/)([^&=%\?]{11})', url)
     if video_id_match:
@@ -20,11 +19,9 @@ def fetch_transcript(video_id):
     try:
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
-        # Attempt to find Turkish manually created transcript
         if 'tr' in transcript_list._manually_created_transcripts:
             transcript = transcript_list.find_manually_created_transcript(['tr'])
             st.success("Turkish manually created transcript found.")
-        # If not available, attempt to find English manually created transcript
         elif 'en' in transcript_list._manually_created_transcripts:
             transcript = transcript_list.find_manually_created_transcript(['en'])
             st.success("English manually created transcript found.")
@@ -60,28 +57,6 @@ def format_time(seconds):
     millis = int((seconds - int(seconds)) * 1000)
     return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
 
-def translate_srt_to_urdu(srt_content):
-    """
-    Translate the content of an SRT file to Urdu.
-    """
-    # Split the SRT content into lines to identify subtitles
-    lines = srt_content.split("\n")
-    
-    translated_content = []
-    
-    for line in lines:
-        if line.strip():  # If the line is not empty
-            # Translate each subtitle line to Urdu
-            translated_line = GoogleTranslator(source='tr', target='ur').translate(line)
-            translated_content.append(translated_line)
-        else:
-            translated_content.append(line)
-    
-    # Join the translated lines back together into SRT format
-    translated_srt = "\n".join(translated_content)
-    
-    return translated_srt
-
 def main():
     st.title("YouTube Subtitle Downloader & Translator")
 
@@ -95,9 +70,23 @@ def main():
                 srt_content = convert_to_srt(transcript_data)
                 st.text_area("Original SRT Content", srt_content, height=300)
 
-                # Translate the SRT content to Urdu
-                translated_srt_content = translate_srt_to_urdu(srt_content)
+                # Progress bar for translation
+                progress_bar = st.progress(0)
+                progress_text = st.empty()
+
+                def update_progress(progress):
+                    progress_bar.progress(int(progress * 100))
+                    progress_text.text(f"Translation Progress: {int(progress * 100)}%")
+
+                # Asynchronously translate the SRT content to Urdu
+                translated_srt_content = run_async_task(
+                    translate_srt_to_urdu_async(srt_content, update_progress)
+                )
                 st.text_area("Translated SRT Content (Urdu)", translated_srt_content, height=300)
+
+                # Clear progress bar
+                progress_bar.empty()
+                progress_text.empty()
 
                 st.download_button(
                     label="Download Original SRT File",
