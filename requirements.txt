@@ -2,5 +2,5 @@ streamlit
 pytube
 pydub
 groq
-googletrans
+deep-translator
 youtube-transcript-api
