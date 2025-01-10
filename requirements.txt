@@ -1,5 +1,5 @@
 streamlit
-pytube
+yt-dlp
 pydub
 groq
 deep-translator
