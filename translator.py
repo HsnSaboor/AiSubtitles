@@ -1,23 +1,30 @@
-from deep_translator import GoogleTranslator
+import asyncio
+from async_google_trans_new import AsyncTranslator
 
-def translate_srt_to_urdu(srt_content):
+async def translate_srt_to_urdu_async(srt_content, progress_callback=None):
     """
-    Translate the content of an SRT file to Urdu.
+    Asynchronously translate the content of an SRT file to Urdu.
     """
-    # Split the SRT content into lines to identify subtitles
+    translator = AsyncTranslator()
     lines = srt_content.split("\n")
-    
-    translated_content = []
-    
-    for line in lines:
-        if line.strip():  # If the line is not empty
-            # Translate each subtitle line to Urdu
-            translated_line = GoogleTranslator(source='tr', target='ur').translate(line)
-            translated_content.append(translated_line)
+    translated_lines = []
+    total_lines = len(lines)
+
+    for i, line in enumerate(lines):
+        if line.strip() and not line.replace(' ', '').isdigit() and '-->' not in line:
+            translated_line = await translator.translate(line, lang_tgt='ur')
+            translated_lines.append(translated_line)
         else:
-            translated_content.append(line)
-    
-    # Join the translated lines back together into SRT format
-    translated_srt = "\n".join(translated_content)
-    
-    return translated_srt
+            translated_lines.append(line)
+
+        # Update progress
+        if progress_callback:
+            progress_callback((i + 1) / total_lines)
+
+    return "\n".join(translated_lines)
+
+def run_async_task(coro):
+    """
+    Helper function to run an asynchronous task.
+    """
+    return asyncio.run(coro)
