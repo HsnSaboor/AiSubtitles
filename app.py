@@ -127,6 +127,7 @@ def generate_srt_file(transcriptions, output_path):
             srt_file.write(f"{text}\n\n")
 
 # Function to fetch and translate subtitles
+# Function to fetch and translate subtitles
 def fetch_and_translate_subtitles(video_id, target_language="ur"):
     try:
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
@@ -139,6 +140,7 @@ def fetch_and_translate_subtitles(video_id, target_language="ur"):
             subtitles = non_auto_transcript.fetch()
             translated_subtitles = []
             for subtitle in subtitles:
+                # Use translator.translate synchronously
                 translated_text = translator.translate(subtitle["text"], dest=target_language).text
                 translated_subtitles.append({
                     "start": subtitle["start"],
