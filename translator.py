@@ -10,7 +10,7 @@ groq_api_key = os.getenv('GROQ_API_KEY')
 client = Groq(api_key=groq_api_key)
 
 
-def chunk_srt(srt_content, chunk_size=25000):
+def chunk_srt(srt_content, chunk_size=5000):
     """
     Chunk the SRT content into manageable pieces for translation.
     Each chunk will have approximately 'chunk_size' tokens.
