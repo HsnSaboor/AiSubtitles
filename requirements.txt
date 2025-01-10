@@ -2,6 +2,7 @@ streamlit
 pytubefix
 youtube-transcript-api
 groq
+tqdm
 googletrans 
 pydub
 deep-translator
