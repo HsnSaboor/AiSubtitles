@@ -7,6 +7,7 @@ def extract_video_id(url):
     """
     Extract the YouTube video ID from various URL formats.
     """
+    # Regular expression to match YouTube URL patterns
     video_id_match = re.match(
         r'(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|embed/|v/|.+\?v=)|youtu\.be/)([^&=%\?]{11})', url)
     if video_id_match:
@@ -19,9 +20,11 @@ def fetch_transcript(video_id):
     try:
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
+        # Attempt to find Turkish manually created transcript
         if 'tr' in transcript_list._manually_created_transcripts:
             transcript = transcript_list.find_manually_created_transcript(['tr'])
             st.success("Turkish manually created transcript found.")
+        # If not available, attempt to find English manually created transcript
         elif 'en' in transcript_list._manually_created_transcripts:
             transcript = transcript_list.find_manually_created_transcript(['en'])
             st.success("English manually created transcript found.")
@@ -40,6 +43,7 @@ def fetch_transcript(video_id):
 
 def translate_to_urdu(text):
     try:
+        # Translate Turkish text to Urdu
         translated = GoogleTranslator(source='tr', target='ur').translate(text)
         return translated
     except Exception as e:
