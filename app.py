@@ -1,6 +1,7 @@
 import streamlit as st
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 import re
+from deep_translator import GoogleTranslator
 
 def extract_video_id(url):
     """
@@ -59,8 +60,30 @@ def format_time(seconds):
     millis = int((seconds - int(seconds)) * 1000)
     return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
 
+def translate_srt_to_urdu(srt_content):
+    """
+    Translate the content of an SRT file to Urdu.
+    """
+    # Split the SRT content into lines to identify subtitles
+    lines = srt_content.split("\n")
+    
+    translated_content = []
+    
+    for line in lines:
+        if line.strip():  # If the line is not empty
+            # Translate each subtitle line to Urdu
+            translated_line = GoogleTranslator(source='en', target='ur').translate(line)
+            translated_content.append(translated_line)
+        else:
+            translated_content.append(line)
+    
+    # Join the translated lines back together into SRT format
+    translated_srt = "\n".join(translated_content)
+    
+    return translated_srt
+
 def main():
-    st.title("YouTube Subtitle Downloader")
+    st.title("YouTube Subtitle Downloader & Translator")
 
     video_url = st.text_input("Enter YouTube Video URL:")
     if video_url:
@@ -70,12 +93,23 @@ def main():
 
             if transcript_data:
                 srt_content = convert_to_srt(transcript_data)
-                st.text_area("SRT Content", srt_content, height=300)
+                st.text_area("Original SRT Content", srt_content, height=300)
+
+                # Translate the SRT content to Urdu
+                translated_srt_content = translate_srt_to_urdu(srt_content)
+                st.text_area("Translated SRT Content (Urdu)", translated_srt_content, height=300)
 
                 st.download_button(
-                    label="Download SRT File",
+                    label="Download Original SRT File",
                     data=srt_content,
                     file_name=f"{video_id}_transcript.srt",
+                    mime="text/plain"
+                )
+
+                st.download_button(
+                    label="Download Translated SRT File (Urdu)",
+                    data=translated_srt_content,
+                    file_name=f"{video_id}_transcript_urdu.srt",
                     mime="text/plain"
                 )
 
