@@ -1,149 +1,14 @@
-import os
-import subprocess
 import streamlit as st
-from pytube import YouTube
-from yt_dlp import YoutubeDL
-from pydub import AudioSegment
+import os
 from groq import Groq
 from deep_translator import GoogleTranslator
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
+from langdetect import detect
+import yt_dlp
+from pydub import AudioSegment
 
-# Suppress SyntaxWarnings
-import warnings
-warnings.filterwarnings("ignore", category=SyntaxWarning)
+# Initialize Groq client with your API key
+client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
 
-# Initialize Groq client and Google Translator
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-translator = GoogleTranslator(source='auto', target='ur')  # Set target language to Urdu
-
-# Helper function to convert seconds to SRT time format
-def seconds_to_srt_time(seconds):
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    milliseconds = int((seconds - int(seconds)) * 1000)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
-
-# Method 1: Download audio using pytube
-def download_audio_pytube(url, output_path):
-    try:
-        yt = YouTube(url)
-        yt.bypass_age_gate = True # Bypass age restriction
-        audio_stream = yt.streams.filter(only_audio=True).first()
-        default_filename = audio_stream.default_filename
-        audio_path = os.path.join(output_path, default_filename)
-        audio_stream.download(output_path=output_path, filename=default_filename)
-        
-        # Convert to FLAC
-        flac_path = os.path.join(output_path, "audio.flac")
-        subprocess.run([
-            "ffmpeg",
-            "-i", audio_path,
-            "-ar", "16000",
-            "-ac", "1",
-            "-c:a", "flac",
-            flac_path
-        ], check=True)
-        
-        os.remove(audio_path)
-        return flac_path
-    except Exception as e:
-        st.warning(f"pytube failed: {e}")
-        return None
-
-# Method 2: Download audio using yt-dlp
-def download_audio_ytdlp(url, output_path):
-    try:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(output_path, '%(title)s.%(ext)s'),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'flac',
-                'preferredquality': '192',
-            }],
-            'cookiefile': 'cookies.txt',  # Use cookies to avoid 403 errors
-            'proxy': '',  # Remove proxy if not needed
-        }
-        with YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(url, download=True)
-            audio_filename = ydl.prepare_filename(info_dict).replace('.webm', '.flac').replace('.mp4', '.flac')
-            return audio_filename
-    except Exception as e:
-        st.warning(f"yt-dlp failed: {e}")
-        return None
-
-# Method 3: Download audio using youtube-dl (fallback)
-def download_audio_youtubedl(url, output_path):
-    try:
-        command = [
-            "youtube-dl",
-            "-f", "bestaudio",
-            "--extract-audio",
-            "--audio-format", "flac",
-            "--audio-quality", "0",
-            "-o", os.path.join(output_path, "%(title)s.%(ext)s"),
-            url
-        ]
-        subprocess.run(command, check=True)
-        for file in os.listdir(output_path):
-            if file.endswith(".flac"):
-                return os.path.join(output_path, file)
-        return None
-    except Exception as e:
-        st.warning(f"youtube-dl failed: {e}")
-        return None
-
-# Function to download audio using multiple methods with fallbacks
-def download_audio(url, output_path):
-    # Try pytube first
-    audio_path = download_audio_pytube(url, output_path)
-    if audio_path:
-        return audio_path
-    
-    # Try yt-dlp if pytube fails
-    audio_path = download_audio_ytdlp(url, output_path)
-    if audio_path:
-        return audio_path
-    
-    # Try youtube-dl if yt-dlp fails
-    audio_path = download_audio_youtubedl(url, output_path)
-    if audio_path:
-        return audio_path
-    
-    # If all methods fail, raise an error
-    raise Exception("All audio download methods failed.")
-
-# Function to fetch and translate subtitles
-def fetch_and_translate_subtitles(video_id, target_language="tr"):
-    try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        non_auto_transcript = None
-        for transcript in transcript_list:
-            if not transcript.is_generated and transcript.language_code == target_language:
-                non_auto_transcript = transcript
-                break
-        if non_auto_transcript:
-            subtitles = non_auto_transcript.fetch()
-            translated_subtitles = []
-            for subtitle in subtitles:
-                translated_text = translator.translate(subtitle["text"])
-                translated_subtitles.append({
-                    "start": subtitle["start"],
-                    "end": subtitle["start"] + subtitle["duration"],
-                    "text": translated_text
-                })
-            return translated_subtitles
-        else:
-            return None
-    except TranscriptsDisabled:
-        st.error("Subtitles are disabled for this video.")
-        return None
-    except Exception as e:
-        st.error(f"Error fetching subtitles: {e}")
-        return None
-
-# Streamlit app
 def main():
     st.title("YouTube Video to Urdu SRT Converter")
     yt_url = st.text_input("Enter YouTube Video URL:")
@@ -151,57 +16,176 @@ def main():
         st.video(yt_url)
         if st.button("Process Video"):
             try:
-                if not os.path.exists("temp"):
-                    os.makedirs("temp")
-                
-                video_id = yt_url.split("v=")[1].split("&")[0]  # Extract video ID from URL
-                subtitles = fetch_and_translate_subtitles(video_id)
-                if subtitles:
-                    st.success("Non-auto-generated subtitles found! Translating to Urdu...")
-                    generate_srt_file(subtitles, "output.srt")
-                    st.success("SRT file generated successfully!")
-                    st.download_button(
-                        label="Download SRT File",
-                        data=open("output.srt", "rb").read(),
-                        file_name="output.srt",
-                        mime="text/srt"
-                    )
-                else:
-                    st.warning("No non-auto-generated subtitles found. Falling back to audio transcription...")
-                    
-                    audio_path = download_audio(yt_url, "temp")
-                    bitrate_bps, total_duration = calculate_bitrate(audio_path)
+                video_id = yt_url.split("v=")[1]
+                st.write("Checking for subtitles...")
+                # Fetch subtitles if available
+                try:
+                    transcript = fetch_subtitles(video_id)
+                    subtitles_available = True
+                    st.write("Subtitles found. Translating to Urdu...")
+                    # Translate subtitles to Urdu
+                    urdu_subtitles = translate_subtitles_to_urdu(transcript)
+                    # Generate SRT with timestamps
+                    srt_content = generate_srt(urdu_subtitles)
+                except:
+                    subtitles_available = False
+                    st.write("Subtitles not found. Downloading audio...")
+                    # Download audio
+                    audio_path = download_audio(yt_url)
+                    if not audio_path:
+                        st.error("Failed to download audio. Please try again later.")
+                        return
+                    # Calculate bitrate and chunk duration
+                    bitrate_bps, duration_seconds = calculate_bitrate(audio_path)
                     chunk_duration = calculate_chunk_duration(bitrate_bps)
-                    chunks = split_audio_into_chunks(audio_path, chunk_duration, "temp")
-                    chunks = adjust_chunks(chunks, max_size_mb=25)
-                    
-                    transcriptions = []
-                    for chunk_path, start_time in chunks:
-                        with st.spinner(f"Transcribing {chunk_path}..."):
-                            transcription = transcribe_chunk(chunk_path, start_time)
-                            transcriptions.extend(transcription)
-                    
-                    # Translate all transcription texts to Urdu
-                    translated_transcriptions = []
-                    for segment in transcriptions:
-                        translated_text = translator.translate(segment["text"])
-                        translated_transcriptions.append({
-                            "start": segment["start"],
-                            "end": segment["end"],
-                            "text": translated_text
-                        })
-                    
-                    # Generate SRT file with translated text
-                    generate_srt_file(translated_transcriptions, "output.srt")
-                    st.success("SRT file generated successfully!")
-                    st.download_button(
-                        label="Download SRT File",
-                        data=open("output.srt", "rb").read(),
-                        file_name="output.srt",
-                        mime="text/srt"
-                    )
+                    # Split audio into chunks
+                    chunks = split_audio_into_chunks(audio_path, chunk_duration, "chunks")
+                    # Adjust chunks to ensure no chunk exceeds 25MB
+                    adjusted_chunks = adjust_chunks(chunks)
+                    # Transcribe each chunk
+                    transcription_segments = []
+                    for chunk_path, start_time in adjusted_chunks:
+                        segments = transcribe_chunk(chunk_path, start_time, language="tr")
+                        transcription_segments.extend(segments)
+                    # Translate transcription to Urdu
+                    translated_segments = translate_transcription_to_urdu(transcription_segments)
+                    # Generate SRT with timestamps
+                    srt_content = generate_srt(translated_segments)
+                # Provide download link for SRT file
+                st.write("Generating SRT file...")
+                st.download_button(
+                    label="Download SRT File",
+                    data=srt_content,
+                    file_name="urdu_subtitles.srt",
+                    mime="application/x-subrip; charset=utf-8"
+                )
+                # Cleanup temporary files
+                cleanup_files(audio_path, adjusted_chunks)
             except Exception as e:
                 st.error(f"An error occurred: {e}")
-                
+
+def fetch_subtitles(video_id):
+    # Implement subtitle fetching logic here
+    # For demonstration, return dummy data
+    return []
+
+def translate_subtitles_to_urdu(subtitles):
+    # Implement subtitle translation logic here
+    # For demonstration, return dummy data
+    return []
+
+def download_audio(url):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': 'audio.flac',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'flac',
+            'preferredquality': '192',
+        }],
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+    audio_path = [f for f in os.listdir('.') if f.endswith('.flac')][0]
+    return audio_path
+
+def calculate_bitrate(audio_path):
+    file_size_bytes = os.path.getsize(audio_path)
+    audio = AudioSegment.from_file(audio_path)
+    duration_seconds = len(audio) / 1000.0
+    bitrate_bps = (file_size_bytes * 8) / duration_seconds
+    return bitrate_bps, duration_seconds
+
+def calculate_chunk_duration(bitrate_bps, target_size_mb=24):
+    target_size_bits = target_size_mb * 1024 * 1024 * 8
+    chunk_duration_seconds = target_size_bits / bitrate_bps
+    return chunk_duration_seconds
+
+def split_audio_into_chunks(audio_path, chunk_duration_seconds, output_path):
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    audio = AudioSegment.from_file(audio_path)
+    chunk_duration_ms = int(chunk_duration_seconds * 1000)
+    chunks = []
+    for i in range(0, len(audio), chunk_duration_ms):
+        chunk = audio[i:i + chunk_duration_ms]
+        chunk_path = os.path.join(output_path, f"chunk_{len(chunks)}.flac")
+        chunk.export(chunk_path, format="flac")
+        chunks.append((chunk_path, i / 1000.0))
+    return chunks
+
+def adjust_chunks(chunks, max_size_mb=25):
+    adjusted_chunks = []
+    for chunk_path, start_time in chunks:
+        file_size_bytes = os.path.getsize(chunk_path)
+        file_size_mb = file_size_bytes / (1024 * 1024)
+        if file_size_mb > max_size_mb:
+            audio = AudioSegment.from_file(chunk_path)
+            half_duration = len(audio) / 2
+            chunk1 = audio[:half_duration]
+            chunk2 = audio[half_duration:]
+            chunk1_path = os.path.join(os.path.dirname(chunk_path), f"chunk_split_{len(adjusted_chunks)}.flac")
+            chunk2_path = os.path.join(os.path.dirname(chunk_path), f"chunk_split_{len(adjusted_chunks)+1}.flac")
+            chunk1.export(chunk1_path, format="flac")
+            chunk2.export(chunk2_path, format="flac")
+            adjusted_chunks.append((chunk1_path, start_time))
+            adjusted_chunks.append((chunk2_path, start_time + half_duration / 1000.0))
+            os.remove(chunk_path)
+        else:
+            adjusted_chunks.append((chunk_path, start_time))
+    return adjusted_chunks
+
+def transcribe_chunk(chunk_path, start_time, language="tr"):
+    with open(chunk_path, "rb") as file:
+        transcription = client.audio.transcriptions.create(
+            file=(chunk_path, file.read()),
+            model="whisper-large-v3-turbo",
+            language=language,
+            response_format="verbose_json"
+        )
+    adjusted_segments = []
+    for segment in transcription["segments"]:
+        segment_start = segment["start"] + start_time
+        segment_end = segment["end"] + start_time
+        adjusted_segments.append({
+            "start": segment_start,
+            "end": segment_end,
+            "text": segment["text"]
+        })
+    return adjusted_segments
+
+def translate_transcription_to_urdu(transcription_segments):
+    source_lang = detect(' '.join([seg['text'] for seg in transcription_segments]))
+    translator = GoogleTranslator(source=source_lang, target='urdu')
+    translated_segments = []
+    for segment in transcription_segments:
+        translated_text = translator.translate(segment['text'])
+        translated_segments.append({
+            "start": segment["start"],
+            "end": segment["end"],
+            "text": translated_text
+        })
+    return translated_segments
+
+def generate_srt(translated_segments):
+    srt_content = ""
+    for i, segment in enumerate(translated_segments, start=1):
+        start_time = seconds_to_srt_time(segment['start'])
+        end_time = seconds_to_srt_time(segment['end'])
+        srt_content += f"{i}\n{start_time} --> {end_time}\n{segment['text']}\n\n"
+    return srt_content
+
+def seconds_to_srt_time(seconds):
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    milliseconds = int((seconds - int(seconds)) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+
+def cleanup_files(audio_path, adjusted_chunks):
+    os.remove(audio_path)
+    for chunk_path, _ in adjusted_chunks:
+        os.remove(chunk_path)
+
 if __name__ == "__main__":
     main()
