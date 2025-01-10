@@ -1,11 +1,11 @@
 import os
 import subprocess
 import streamlit as st
-from pytube import YouTube
+from yt_dlp import YoutubeDL
 from pydub import AudioSegment
 from groq import Groq
 from deep_translator import GoogleTranslator
-from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
 
 # Suppress SyntaxWarnings
 import warnings
@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 # Initialize Groq client and Google Translator
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-translator = GoogleTranslator(source='auto', target='ur')  # Set target language to Urdu
+translator = GoogleTranslator(source='auto', target='tr')  # Set target language to Turkish
 
 # Helper function to convert seconds to SRT time format
 def seconds_to_srt_time(seconds):
@@ -23,27 +23,21 @@ def seconds_to_srt_time(seconds):
     milliseconds = int((seconds - int(seconds)) * 1000)
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
 
-# Function to download and convert audio
+# Function to download and convert audio using yt-dlp
 def download_and_convert_audio(url, output_path):
-    yt = YouTube(url)
-    yt.bypass_age_gate = True  # Fix: Set the property, don't call it
-    audio_stream = yt.streams.filter(only_audio=True).first()
-    default_filename = audio_stream.default_filename
-    audio_path = os.path.join(output_path, default_filename)
-    audio_stream.download(output_path=output_path, filename=default_filename)
-    
-    flac_path = os.path.join(output_path, "audio.flac")
-    subprocess.run([
-        "ffmpeg",
-        "-i", audio_path,
-        "-ar", "16000",
-        "-ac", "1",
-        "-c:a", "flac",
-        flac_path
-    ], check=True)
-    
-    os.remove(audio_path)
-    return flac_path
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': os.path.join(output_path, '%(title)s.%(ext)s'),
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'flac',
+            'preferredquality': '192',
+        }],
+    }
+    with YoutubeDL(ydl_opts) as ydl:
+        info_dict = ydl.extract_info(url, download=True)
+        audio_filename = ydl.prepare_filename(info_dict).replace('.webm', '.flac').replace('.mp4', '.flac')
+        return audio_filename
 
 # Function to calculate average bitrate
 def calculate_bitrate(audio_path):
@@ -127,12 +121,12 @@ def generate_srt_file(transcriptions, output_path):
             srt_file.write(f"{text}\n\n")
 
 # Function to fetch and translate subtitles
-def fetch_and_translate_subtitles(video_id, target_language="ur"):
+def fetch_and_translate_subtitles(video_id, target_language="tr"):
     try:
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
         non_auto_transcript = None
         for transcript in transcript_list:
-            if not transcript.is_generated:
+            if not transcript.is_generated and transcript.language_code == target_language:
                 non_auto_transcript = transcript
                 break
         if non_auto_transcript:
@@ -148,13 +142,16 @@ def fetch_and_translate_subtitles(video_id, target_language="ur"):
             return translated_subtitles
         else:
             return None
+    except TranscriptsDisabled:
+        st.error("Subtitles are disabled for this video.")
+        return None
     except Exception as e:
         st.error(f"Error fetching subtitles: {e}")
         return None
 
 # Streamlit app
 def main():
-    st.title("YouTube Video to Urdu SRT Converter")
+    st.title("YouTube Video to Turkish SRT Converter")
     yt_url = st.text_input("Enter YouTube Video URL:")
     if yt_url:
         st.video(yt_url)
@@ -163,10 +160,10 @@ def main():
                 if not os.path.exists("temp"):
                     os.makedirs("temp")
                 
-                video_id = YouTube(yt_url).video_id
+                video_id = yt_url.split("v=")[1].split("&")[0]  # Extract video ID from URL
                 subtitles = fetch_and_translate_subtitles(video_id)
                 if subtitles:
-                    st.success("Non-auto-generated subtitles found! Translating to Urdu...")
+                    st.success("Non-auto-generated subtitles found! Translating to Turkish...")
                     generate_srt_file(subtitles, "output.srt")
                     st.success("SRT file generated successfully!")
                     st.download_button(
@@ -190,7 +187,7 @@ def main():
                             transcription = transcribe_chunk(chunk_path, start_time)
                             transcriptions.extend(transcription)
                     
-                    # Translate all transcription texts to Urdu
+                    # Translate all transcription texts to Turkish
                     translated_transcriptions = []
                     for segment in transcriptions:
                         translated_text = translator.translate(segment["text"])
