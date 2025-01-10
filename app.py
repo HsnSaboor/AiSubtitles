@@ -72,7 +72,7 @@ def translate_srt_to_urdu(srt_content):
     for line in lines:
         if line.strip():  # If the line is not empty
             # Translate each subtitle line to Urdu
-            translated_line = GoogleTranslator(source='en', target='ur').translate(line)
+            translated_line = GoogleTranslator(source='tr', target='ur').translate(line)
             translated_content.append(translated_line)
         else:
             translated_content.append(line)
