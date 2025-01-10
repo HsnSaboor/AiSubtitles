@@ -1,10 +1,6 @@
 streamlit
-pytube
-yt-dlp
-youtube-dl
-pydub
-deep-translator
+pytubefix
 youtube-transcript-api
+async-google-trans-new
 groq
-ffmpeg-python
-langdetect
+pydub
