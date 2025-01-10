@@ -22,11 +22,14 @@ def extract_video_id(url):
 
 def fetch_transcript(video_id):
     try:
+        # Fetch the available transcripts for the video
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
+        # Check if manually created Turkish transcript exists
         if 'tr' in transcript_list._manually_created_transcripts:
             transcript = transcript_list.find_manually_created_transcript(['tr'])
             st.success("Turkish manually created transcript found.")
+        # Check if manually created English transcript exists
         elif 'en' in transcript_list._manually_created_transcripts:
             transcript = transcript_list.find_manually_created_transcript(['en'])
             st.success("English manually created transcript found.")
@@ -34,14 +37,21 @@ def fetch_transcript(video_id):
             st.error("No manually created transcripts found in Turkish or English.")
             return None
 
-        return transcript.fetch()
+        # Fetch the transcript data
+        transcript_data = transcript.fetch()
+
+        # Return the transcript data (list of dictionaries)
+        return transcript_data
 
     except TranscriptsDisabled:
         st.error("Transcripts are disabled for this video.")
+        return None
     except NoTranscriptFound:
         st.error("No transcripts found for this video.")
+        return None
     except Exception as e:
         st.error(f"An error occurred: {e}")
+        return None
 
 def convert_to_srt(transcript_data):
     srt_content = ""
