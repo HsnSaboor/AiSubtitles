@@ -5,10 +5,9 @@ import google.generativeai as genai
 import json
 import time
 from collections import deque
-import asyncio
-import httpx
+from concurrent.futures import ThreadPoolExecutor
 import random
-
+import yt_dlp
 
 # Setup Gemini API
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -72,20 +71,54 @@ def fetch_transcript_fallback(video_id):
             st.success("Turkish manually created transcript found using fallback method.")
             transcript_data = transcript.fetch()
             return transcript_data
+       elif 'en' in transcript_list._manually_created_transcripts:
+           transcript = transcript_list.find_manually_created_transcript(['en'])
+           st.success("English manually created transcript found using fallback method.")
+           transcript_data = transcript.fetch()
+           return transcript_data
        else:
             transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['tr'])
             st.success("Turkish transcript fetched using fallback method.")
             return transcript
 
    except TranscriptsDisabled:
-        st.error("Transcripts are disabled even using fallback method.")
-        return None
+        st.warning("Transcripts are disabled even using fallback method, attempting yt-dlp fallback method...")
+        return fetch_transcript_yt_dlp(video_id)
    except NoTranscriptFound:
         st.error("No transcripts found using fallback method.")
         return None
    except Exception as e:
         st.error(f"An error occurred in fallback method: {e}")
         return None
+
+def fetch_transcript_yt_dlp(video_id):
+    """Fallback method to fetch transcript using yt-dlp."""
+    try:
+        ydl_opts = {
+            'writesubtitles': True,
+            'subtitleslangs': ['tr'],
+            'skip_download': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+            
+            if 'subtitles' in info_dict and 'tr' in info_dict['subtitles']:
+              subtitles = info_dict['subtitles']['tr']
+              srt_content = yt_dlp.utils.get_first(subtitles, {}).get('data', '')
+              if srt_content:
+                  st.success("Turkish transcript fetched using yt_dlp fallback method.")
+                  return parse_srt(srt_content)
+              else:
+                  st.error("No subtitles found in yt_dlp output.")
+                  return None
+            else:
+                st.error("No Turkish subtitles found using yt_dlp")
+                return None
+
+    except Exception as e:
+        st.error(f"An error occurred in yt_dlp fallback method: {e}")
+        return None
+
 
 def convert_to_srt(transcript_data):
     """Converts transcript data to SRT format."""
@@ -189,8 +222,8 @@ def replace_ranks_titles(text):
         text = re.sub(pattern, replacement, text)
     return text
     
-async def async_translate_chunk(chunk, retry_queue, rate_limit_info, client, target_language="urdu", max_retries=3):
-    """Asynchronously translates a chunk of text to Urdu using the Gemini API with httpx."""
+def translate_chunk(chunk, retry_queue, rate_limit_info, target_language="urdu", max_retries=3):
+    """Translates a chunk of text to Urdu using the Gemini API with httpx."""
 
     input_lines = [line['text'] for line in chunk]
     input_json = json.dumps({"lines": input_lines})
@@ -311,59 +344,49 @@ async def async_translate_chunk(chunk, retry_queue, rate_limit_info, client, tar
     00:00:31,000 --> 00:00:35,000  
     عثمان سردار: "یہ زمینیں ہمارے خون سے سرسبز ہوں گی!"
     """
-
     for attempt in range(max_retries):
         if not rate_limit_info.can_send_request():
             st.warning("Rate limit reached. Sleeping...")
-            await asyncio.sleep(60)
+            time.sleep(60)
             rate_limit_info.reset_rate_limits()
             continue
-
         try:
-            async with client.post(url="https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", json={
-            "contents": [{
-              "parts": [{
-                  "text": prompt
-                  }]
-              }]
-            },headers={"x-goog-api-key":st.secrets["GOOGLE_API_KEY"]}) as response:
-                response.raise_for_status()
-                response_json = await response.json()
+            response = model.generate_content(prompt)
+            rate_limit_info.update_rate_limits(len(prompt.split()) + len(str(response).split()))
 
-                if response_json and "candidates" in response_json and response_json["candidates"] and 'content' in response_json["candidates"][0] and "parts" in response_json["candidates"][0]['content'] and response_json["candidates"][0]["content"]["parts"] and  'text' in response_json["candidates"][0]["content"]["parts"][0]:
-                    api_response_text = response_json["candidates"][0]["content"]["parts"][0]['text']
-                    rate_limit_info.update_rate_limits(len(prompt.split())+len(str(api_response_text).split()))
-                    try:
-                        json_response = json.loads(api_response_text)
-                        translated_lines = json_response.get('lines')
+            if response and response.text:
+                try:
+                    json_response = json.loads(response.text)
+                    translated_lines = json_response.get('lines')
 
-                        if not translated_lines:
-                            st.warning(f"Invalid JSON format: 'lines' key missing, retrying request (attempt {attempt+1}/{max_retries})")
-                            retry_queue.append(chunk)
-                            return None
-
-                        if len(translated_lines) != len(input_lines):
-                            st.warning(f"Line length mismatch, retrying request (attempt {attempt+1}/{max_retries})")
-                            retry_queue.append(chunk)
-                            return None
-                        else:
-                            return translated_lines
-                    except json.JSONDecodeError:
-                        st.warning(f"Invalid JSON Response, retrying request (attempt {attempt+1}/{max_retries})")
+                    if not translated_lines:
+                        st.warning(f"Invalid JSON format: 'lines' key missing, retrying request (attempt {attempt + 1}/{max_retries})")
                         retry_queue.append(chunk)
                         return None
-                else:
-                     st.warning(f"Empty or invalid response received from API, retrying request (attempt {attempt+1}/{max_retries})")
-                     retry_queue.append(chunk)
-                     return None
+
+                    if len(translated_lines) != len(input_lines):
+                        st.warning(f"Line length mismatch, retrying request (attempt {attempt + 1}/{max_retries})")
+                        retry_queue.append(chunk)
+                        return None
+                    else:
+                        return translated_lines
+                except json.JSONDecodeError:
+                    st.warning(f"Invalid JSON Response, retrying request (attempt {attempt + 1}/{max_retries})")
+                    retry_queue.append(chunk)
+                    return None
+            else:
+                st.warning(f"Empty or invalid response received from API, retrying request (attempt {attempt + 1}/{max_retries})")
+                retry_queue.append(chunk)
+                return None
 
         except Exception as e:
-            st.error(f"An error occurred: {e}, retrying request (attempt {attempt+1}/{max_retries})")
+            st.error(f"An error occurred: {e}, retrying request (attempt {attempt + 1}/{max_retries})")
             retry_queue.append(chunk)
-            await asyncio.sleep(random.uniform(1,3))
+            time.sleep(random.uniform(1, 3))
             continue
+
     st.error(f"Failed to translate chunk after {max_retries} retries.")
-    return None 
+    return None
 
 class RateLimitInfo:
     def __init__(self, max_requests_per_minute=15, max_tokens_per_minute=1_000_000, max_requests_per_day=1500):
@@ -398,7 +421,8 @@ class RateLimitInfo:
         self.tokens_this_minute = 0
         self.last_reset_time = time.time()
 
-async def translate_srt(transcript_data, rate_limit_info):
+
+def translate_srt(transcript_data, rate_limit_info):
     """
     Translates all the srt data to Urdu using parallel requests.
     """
@@ -417,26 +441,26 @@ async def translate_srt(transcript_data, rate_limit_info):
     translated_chunks = []
     retry_queue = deque()
 
-    async with httpx.AsyncClient() as client:
-      tasks = [async_translate_chunk(chunk, retry_queue, rate_limit_info,client) for chunk in chunks]
-      results = await asyncio.gather(*tasks)
-      
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+      futures = [executor.submit(translate_chunk, chunk, retry_queue, rate_limit_info) for chunk in chunks]
+      results = [future.result() for future in futures]
+
       for chunk,translated_lines in zip(chunks,results):
           if translated_lines:
-              translated_chunks.append((chunk,translated_lines))
-          
+             translated_chunks.append((chunk,translated_lines))
           progress_bar.progress(len(translated_chunks)/len(chunks))
 
     while retry_queue:
-         chunk = retry_queue.popleft()
-         translated_lines = await async_translate_chunk(chunk, retry_queue, rate_limit_info,client)
-         if translated_lines:
-            for i,(original_chunk, _) in enumerate(translated_chunks):
-                 if original_chunk == chunk:
+        chunk = retry_queue.popleft()
+        translated_lines = translate_chunk(chunk, retry_queue, rate_limit_info)
+        if translated_lines:
+            for i, (original_chunk, _) in enumerate(translated_chunks):
+                if original_chunk == chunk:
                     translated_chunks[i] = (original_chunk, translated_lines)
                     break
-         progress_bar.progress(len(translated_chunks)/len(chunks))
-    
+        progress_bar.progress(len(translated_chunks)/len(chunks))
+
     if len(translated_chunks) != len(chunks):
         st.error("Translation failed for some chunks, Please try again.")
         return None
@@ -498,7 +522,7 @@ def main():
         
         if transcript_data:
              rate_limit_info = RateLimitInfo()
-             translated_srt = asyncio.run(translate_srt(transcript_data, rate_limit_info))
+             translated_srt = translate_srt(transcript_data, rate_limit_info)
              if translated_srt:
                 st.text_area("Translated SRT Content (Urdu)", translated_srt, height=300)
                 st.download_button(
