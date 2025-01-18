@@ -65,10 +65,17 @@ def fetch_transcript(video_id):
 def fetch_transcript_fallback(video_id):
    """Fallback method to fetch transcript using get_transcript."""
    try:
-        # Attempt to get the Turkish transcript using get_transcript
-        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['tr'])
-        st.success("Turkish transcript fetched using fallback method.")
-        return transcript
+       transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+       if 'tr' in transcript_list._manually_created_transcripts:
+            transcript = transcript_list.find_manually_created_transcript(['tr'])
+            st.success("Turkish manually created transcript found using fallback method.")
+            transcript_data = transcript.fetch()
+            return transcript_data
+       else:
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['tr'])
+            st.success("Turkish transcript fetched using fallback method.")
+            return transcript
 
    except TranscriptsDisabled:
         st.error("Transcripts are disabled even using fallback method.")
@@ -100,6 +107,44 @@ def format_time(seconds):
     secs = int(seconds % 60)
     millis = int((seconds - int(seconds)) * 1000)
     return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
+
+def parse_srt(srt_content):
+        """Parses the SRT content and returns the list of transcript dictionaries."""
+        lines = srt_content.strip().split("\n")
+        entries = []
+        i = 0
+        while i < len(lines) - 2 :
+            try:
+              index = int(lines[i])
+              time_line = lines[i + 1]
+              text = lines[i + 2]
+              
+              time_match = re.match(r"(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})",time_line)
+              if time_match:
+                start_time_str, end_time_str = time_match.groups()
+                start_time = time_to_seconds(start_time_str)
+                end_time = time_to_seconds(end_time_str)
+                duration = end_time - start_time
+
+                entry = {
+                   'start': start_time,
+                    'duration': duration,
+                    'text': text
+                }
+                entries.append(entry)
+                i+=4
+              else:
+                  i+=1 #Skip this line
+            except ValueError:
+                i+=1 # Skip this line if index cant be converted into int
+
+        return entries
+
+def time_to_seconds(time_str):
+    """Converts an SRT time string to seconds."""
+    hours, minutes, seconds_milliseconds = time_str.split(":")
+    seconds, milliseconds = seconds_milliseconds.split(",")
+    return int(hours) * 3600 + int(minutes) * 60 + int(seconds) + int(milliseconds) / 1000
 
 # --- Translation Functions ---
 def chunk_transcript(transcript_data, max_tokens=7000):
@@ -283,8 +328,8 @@ async def async_translate_chunk(chunk, retry_queue, rate_limit_info, client, tar
               }]
             },headers={"x-goog-api-key":st.secrets["GOOGLE_API_KEY"]}) as response:
                 response.raise_for_status()
-                response_json = response.json()
-                
+                response_json = await response.json()
+
                 if response_json and "candidates" in response_json and response_json["candidates"] and 'content' in response_json["candidates"][0] and "parts" in response_json["candidates"][0]['content'] and response_json["candidates"][0]["content"]["parts"] and  'text' in response_json["candidates"][0]["content"]["parts"][0]:
                     api_response_text = response_json["candidates"][0]["content"]["parts"][0]['text']
                     rate_limit_info.update_rate_limits(len(prompt.split())+len(str(api_response_text).split()))
@@ -382,7 +427,6 @@ async def translate_srt(transcript_data, rate_limit_info):
           
           progress_bar.progress(len(translated_chunks)/len(chunks))
 
-
     while retry_queue:
          chunk = retry_queue.popleft()
          translated_lines = await async_translate_chunk(chunk, retry_queue, rate_limit_info,client)
@@ -418,29 +462,51 @@ def main():
     st.title("YouTube Subtitle Downloader & Translator")
 
     video_url = st.text_input("Enter YouTube Video URL:")
-    if video_url:
-        video_id = extract_video_id(video_url)
-        if video_id:
-            transcript_data = fetch_transcript(video_id)
-            if transcript_data:
-                srt_content = convert_to_srt(transcript_data)
-                st.text_area("Original SRT Content", srt_content, height=300)
+    uploaded_file = st.file_uploader("Or Upload an SRT File", type=["srt"])
+
+    if video_url or uploaded_file:
+        
+        if uploaded_file:
+            srt_content = uploaded_file.read().decode("utf-8")
+            transcript_data = parse_srt(srt_content)
+            st.text_area("Uploaded SRT Content", srt_content, height=300)
+
+            st.download_button(
+                  label="Download Original SRT File",
+                  data=srt_content,
+                  file_name=f"uploaded_transcript.srt",
+                  mime="text/plain"
+              )
+
+
+        elif video_url:
+            video_id = extract_video_id(video_url)
+            if video_id:
+                 transcript_data = fetch_transcript(video_id)
+
+                 if transcript_data:
+                    srt_content = convert_to_srt(transcript_data)
+                    st.text_area("Original SRT Content", srt_content, height=300)
+                    st.download_button(
+                         label="Download Original SRT File",
+                         data=srt_content,
+                         file_name=f"{video_id}_transcript.srt",
+                         mime="text/plain"
+                     )
+        else:
+            transcript_data= None
+        
+        if transcript_data:
+             rate_limit_info = RateLimitInfo()
+             translated_srt = asyncio.run(translate_srt(transcript_data, rate_limit_info))
+             if translated_srt:
+                st.text_area("Translated SRT Content (Urdu)", translated_srt, height=300)
                 st.download_button(
-                    label="Download Original SRT File",
-                    data=srt_content,
-                    file_name=f"{video_id}_transcript.srt",
+                   label="Download Translated SRT File (Urdu)",
+                    data=translated_srt,
+                    file_name=f"translated_transcript_urdu.srt",
                     mime="text/plain"
                 )
-                rate_limit_info = RateLimitInfo()
-                translated_srt = asyncio.run(translate_srt(transcript_data, rate_limit_info))
-                if translated_srt:
-                    st.text_area("Translated SRT Content (Urdu)", translated_srt, height=300)
-                    st.download_button(
-                        label="Download Translated SRT File (Urdu)",
-                        data=translated_srt,
-                        file_name=f"{video_id}_transcript_urdu.srt",
-                        mime="text/plain"
-                    )
-
+    
 if __name__ == "__main__":
     main()
