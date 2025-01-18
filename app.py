@@ -489,8 +489,8 @@ class RateLimitInfo:
     def __init__(self, max_requests_per_minute=15, max_tokens_per_minute=1_000_000, max_requests_per_day=1500):
         self.max_requests_per_minute = {
             'gemini': 15,
-            'huggingface': 1000 / 60,
-            'groq': 14400 / 60
+            'huggingface': int(1000 / 60),  # Convert to integer
+            'groq': int(14400 / 60)  # Convert to integer
         }
         self.max_tokens_per_minute = {
             'gemini': 1_000_000,
