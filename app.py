@@ -363,7 +363,7 @@ async def async_translate_chunk(chunk, retry_queue, rate_limit_info, client, tar
             await asyncio.sleep(random.uniform(1,3))
             continue
     st.error(f"Failed to translate chunk after {max_retries} retries.")
-    return None
+    return None 
 
 class RateLimitInfo:
     def __init__(self, max_requests_per_minute=15, max_tokens_per_minute=1_000_000, max_requests_per_day=1500):
