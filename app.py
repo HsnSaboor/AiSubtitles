@@ -633,3 +633,54 @@ def translate_srt(transcript_data, rate_limit_info, selected_model='gemini'):
                st.text(f"Chunk {i+1} :")
                for line in chunk:
                   st.text(line['text'])
+
+def main():
+    st.title("YouTube Turkish to Urdu Subtitle Translator")
+    
+    # Input for YouTube URL
+    youtube_url = st.text_input("Enter YouTube Video URL:")
+    
+    if youtube_url:
+        video_id = extract_video_id(youtube_url)
+        if video_id:
+            st.info(f"Extracted Video ID: {video_id}")
+            
+            # Fetch transcript
+            transcript_data = fetch_transcript(video_id)
+            if transcript_data:
+                st.success("Transcript fetched successfully!")
+                
+                # Display original transcript
+                if st.checkbox("Show Original Transcript"):
+                    st.text_area("Original Transcript", convert_to_srt(transcript_data), height=300)
+                
+                # Select translation model
+                selected_model = st.selectbox("Select Translation Model", ["gemini", "groq", "huggingface"])
+                
+                # Initialize rate limit info
+                rate_limit_info = RateLimitInfo()
+                
+                # Translate transcript
+                if st.button("Translate to Urdu"):
+                    with st.spinner("Translating..."):
+                        translated_srt = translate_srt(transcript_data, rate_limit_info, selected_model)
+                        if translated_srt:
+                            st.success("Translation completed!")
+                            st.text_area("Translated Urdu Subtitles", translated_srt, height=300)
+                            
+                            # Download translated SRT file
+                            st.download_button(
+                                label="Download Translated SRT",
+                                data=translated_srt,
+                                file_name="translated_subtitles.srt",
+                                mime="text/srt"
+                            )
+                        else:
+                            st.error("Translation failed. Please try again.")
+            else:
+                st.error("Failed to fetch transcript.")
+        else:
+            st.error("Invalid YouTube URL.")
+
+if __name__ == "__main__":
+    main()
