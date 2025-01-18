@@ -381,7 +381,46 @@ def translate_chunk(chunk, retry_queue, rate_limit_info, target_language="urdu",
                   st.warning(f"Empty or invalid response received from API, retrying request (attempt {attempt + 1}/{max_retries})")
                   retry_queue.append(chunk)
                   return None
+            
+            elif llm_provider == 'groq':
+                from groq import Groq
+                client = Groq()
+                try:
 
+                   chat_completion = client.chat.completions.create(
+                      messages=[
+                        {"role": "system", "content": prompt},
+                        ],
+                      model="llama-3.3-70b-versatile",
+                      temperature=0,
+                      max_completion_tokens=8192,
+                       response_format={"type": "json_object"},
+                     )
+                   api_response_text = chat_completion.choices[0].message.content
+
+                   rate_limit_info.update_rate_limits(len(prompt.split()) + len(str(api_response_text).split()), llm_provider)
+
+                   try:
+                         json_response = json.loads(api_response_text)
+                         translated_lines = json_response.get('lines')
+                         if not translated_lines:
+                             st.warning(f"Invalid JSON format: 'lines' key missing, retrying request (attempt {attempt + 1}/{max_retries})")
+                             retry_queue.append(chunk)
+                             return None
+                         if len(translated_lines) != len(input_lines):
+                             st.warning(f"Line length mismatch, retrying request (attempt {attempt + 1}/{max_retries})")
+                             retry_queue.append(chunk)
+                             return None
+                         else:
+                           return translated_lines
+                   except json.JSONDecodeError:
+                      st.warning(f"Invalid JSON Response, retrying request (attempt {attempt + 1}/{max_retries})")
+                      retry_queue.append(chunk)
+                      return None
+                except Exception as e:
+                   st.error(f"Groq API error : {e}, retrying request (attempt {attempt + 1}/{max_retries})")
+                   retry_queue.append(chunk)
+                   continue
             elif llm_provider == 'huggingface':
               api_url = "https://api-inference.huggingface.co/models/meta-llama/Llama-3-70B-Instruct"
               headers = {
@@ -391,7 +430,7 @@ def translate_chunk(chunk, retry_queue, rate_limit_info, target_language="urdu",
               data = {
                    "inputs": prompt,
                    "options": {"wait_for_model": True},
-                   "parameters" : {"max_new_tokens" : 4000}
+                   "parameters" : {"max_new_tokens" : 8192}
                 }
               try:
                  with httpx.Client() as client:
@@ -454,39 +493,48 @@ class RateLimitInfo:
         self.max_requests_per_minute = {
             'gemini': 15,
             'huggingface' : 1000/60,
+            'groq' : 14400/60
         }
         self.max_tokens_per_minute = {
           'gemini': 1_000_000,
              'huggingface' : 100000,
+              'groq' : 6000
         }
         self.max_requests_per_day = {
             'gemini': 1500,
              'huggingface' : 1000,
+              'groq' : 1000,
         }
 
         self.request_queue = {
           'gemini': deque(maxlen=self.max_requests_per_minute['gemini']),
           'huggingface':deque(maxlen=self.max_requests_per_minute['huggingface']),
+          'groq': deque(maxlen=self.max_requests_per_minute['groq'])
         }
         self.tokens_this_minute = {
           'gemini':0,
             'huggingface' : 0,
+              'groq' : 0,
           }
         self.requests_today = {
           'gemini':0,
               'huggingface': 0,
+               'groq' : 0
         }
         self.last_reset_time = {
           'gemini':time.time(),
               'huggingface': time.time(),
+               'groq': time.time(),
         }
         self.daily_requests_made = {
           'gemini':0,
               'huggingface': 0,
+                'groq' : 0
         }
         self.last_reset_day = {
           'gemini': time.time() // (24 * 3600),
              'huggingface': time.time() // (24 * 3600),
+              'groq': time.time() // (24 * 3600),
         }
 
 
@@ -533,6 +581,8 @@ def translate_srt(transcript_data, rate_limit_info, selected_model='gemini'):
         Translate all dialogues and narration from Turkish to Urdu.
         Ensure ranks, idioms, poetry, and cultural references are appropriately translated into Urdu.
         Account for potential spelling errors in the Turkish input.
+        The JSON object you will be translating is:
+        {input_json}
     Respond with a JSON object in the same format that has the translated subtitles as lines.
 
     Detailed Instructions:
@@ -699,78 +749,3 @@ def translate_srt(transcript_data, rate_limit_info, selected_model='gemini'):
                st.text(f"Chunk {i+1} :")
                for line in chunk:
                   st.text(line['text'])
-
-          st.text("System Prompt:")
-          st.text(system_prompt)
-          return None
-
-    translated_srt = ""
-    line_index = 1
-    for original_chunk, translated_lines in translated_chunks:
-        for i, original_line in enumerate(original_chunk):
-            start = original_line['start']
-            duration = original_line['duration']
-            end = start + duration
-            translated_text = translated_lines[i]
-            translated_text = replace_ranks_titles(translated_text)
-            translated_srt += f"{line_index}\n"
-            translated_srt += f"{format_time(start)} --> {format_time(end)}\n"
-            translated_srt += f"{translated_text}\n\n"
-            line_index += 1
-    st.success("Translation complete.")
-    return translated_srt
-
-# --- Streamlit App ---
-def main():
-    st.title("YouTube Subtitle Downloader & Translator")
-
-    video_url = st.text_input("Enter YouTube Video URL:")
-    uploaded_file = st.file_uploader("Or Upload an SRT File", type=["srt"])
-    
-    selected_model = st.selectbox("Select LLM for translation (fallback)", ['huggingface', 'gemini'])
-    if video_url or uploaded_file:
-        
-        if uploaded_file:
-            srt_content = uploaded_file.read().decode("utf-8")
-            transcript_data = parse_srt(srt_content)
-            st.text_area("Uploaded SRT Content", srt_content, height=300)
-
-            st.download_button(
-                  label="Download Original SRT File",
-                  data=srt_content,
-                  file_name=f"uploaded_transcript.srt",
-                  mime="text/plain"
-              )
-
-
-        elif video_url:
-            video_id = extract_video_id(video_url)
-            if video_id:
-                 transcript_data = fetch_transcript(video_id)
-
-                 if transcript_data:
-                    srt_content = convert_to_srt(transcript_data)
-                    st.text_area("Original SRT Content", srt_content, height=300)
-                    st.download_button(
-                         label="Download Original SRT File",
-                         data=srt_content,
-                         file_name=f"{video_id}_transcript.srt",
-                         mime="text/plain"
-                     )
-        else:
-            transcript_data= None
-        
-        if transcript_data:
-             rate_limit_info = RateLimitInfo()
-             translated_srt = translate_srt(transcript_data, rate_limit_info)
-             if translated_srt:
-                st.text_area("Translated SRT Content (Urdu)", translated_srt, height=300)
-                st.download_button(
-                   label="Download Translated SRT File (Urdu)",
-                    data=translated_srt,
-                    file_name=f"translated_transcript_urdu.srt",
-                    mime="text/plain"
-                )
-    
-if __name__ == "__main__":
-    main()
