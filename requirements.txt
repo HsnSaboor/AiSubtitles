@@ -6,3 +6,4 @@ tqdm
 googletrans 
 pydub
 deep-translator
+httpx
