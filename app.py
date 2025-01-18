@@ -189,16 +189,130 @@ def format_time(seconds):
     return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
 
 # --- Translation Functions ---
-def translate_text(text, api):
+def translate_text(text, api, request_no):
     """Translates text using the selected API."""
     try:
+        st.write(f"Request {request_no}: Translating line: {text}")
         if api == "Google AI Studio":
             response = gemini_model.generate_content(f"Translate this Turkish text to Urdu: {text}")
             return response.text
         elif api == "Groq":
             response = groq_client.chat.completions.create(
                 messages=[
-                    {"role": "system", "content": "You are a translator specializing in Turkish to Urdu translation."},
+                    {"role": "system", "content": "{system_promptYou are an advanced AI translator specializing in converting Turkish historical drama subtitles into Urdu for a Pakistani audience. The input and output will be in JSON format, and your task is to:
+
+        Translate all dialogues and narration from Turkish to Urdu.
+        Ensure ranks, idioms, poetry, and cultural references are appropriately translated into Urdu.
+        Account for potential spelling errors in the Turkish input.
+        The JSON object you will be translating is:
+        {input_json}
+    Respond with a JSON object in the same format that has the translated subtitles as lines.
+
+    Detailed Instructions:
+
+    Translate Ranks and Titles:
+    Replace Turkish ranks with culturally relevant Urdu equivalents:
+    "Bey" → "سردار"
+    "Sultan" → "سلطان"
+    "Alp" → "سپاہی" or "مجاہد"
+    "Şeyh" → "شیخ"
+
+    Poetry and Idioms:
+    Translate poetry, idiomatic expressions, and figures of speech in a way that preserves their emotional and poetic impact.
+
+    Handle Spelling Errors:
+    Correct common spelling errors in Turkish input. For example:
+        "Osmalı" → "Osmanlı"
+        "By" → "Bey"
+
+    Examples of Turkish Input and Urdu Output:
+    Example 1:
+
+    Turkish SRT Input:
+
+    1  
+    00:00:01,000 --> 00:00:04,000  
+    Bugün savaş meydanında kanımızı akıtacağız!  
+
+    2  
+    00:00:05,000 --> 00:00:08,000  
+    Osmanlı'nın adını yaşatmak için öleceğiz.  
+
+    Urdu SRT Output:
+
+    1  
+    00:00:01,000 --> 00:00:04,000  
+    آج ہم جنگ کے میدان میں اپنا خون بہائیں گے!  
+
+    2  
+    00:00:05,000 --> 00:00:08,000  
+    عثمانی کے نام کو زندہ رکھنے کے لئے جان دیں گے۔  
+
+    Example 2:
+
+    Turkish SRT Input (with spelling errors):
+
+    3  
+    00:00:09,000 --> 00:00:12,000  
+    Byler, zafere giden yol buradan geçer!  
+
+    4  
+    00:00:13,000 --> 00:00:16,000  
+    Şimdi savaşmaya hazır olun!  
+
+    Urdu SRT Output:
+
+    3  
+    00:00:09,000 --> 00:00:12,000  
+    سرداروں، فتح کا راستہ یہیں سے گزرتا ہے!  
+
+    4  
+    00:00:13,000 --> 00:00:16,000  
+    اب جنگ کے لئے تیار ہو جاؤ!  
+
+    Example 3:
+
+    Turkish SRT Input (with poetry):
+
+    5  
+    00:00:17,000 --> 00:00:21,000  
+    Adaletin ağacı kanla beslenir, ama zulüm de bir gün düşer.  
+
+    6  
+    00:00:22,000 --> 00:00:26,000  
+    Herkes, Osman Bey’in adaletine şahit olacak!  
+
+    Urdu SRT Output:
+
+    5  
+    00:00:17,000 --> 00:00:21,000  
+    انصاف کا درخت خون سے سینچا جاتا ہے، لیکن ظلم بھی ایک دن گر جاتا ہے۔  
+
+    6  
+    00:00:22,000 --> 00:00:26,000  
+    ہر کوئی عثمان سردار کے انصاف کا گواہ بنے گا!  
+
+    Example 4:
+
+    Turkish SRT Input (with cultural references):
+
+    7  
+    00:00:27,000 --> 00:00:30,000  
+    Şeyh Edebali: “Sabır, zaferin anahtarıdır.”  
+
+    8  
+    00:00:31,000 --> 00:00:35,000  
+    Osman Bey: “Bu topraklar bizim kanımızla yeşerecek!”  
+
+    Urdu SRT Output:
+
+    7  
+    00:00:27,000 --> 00:00:30,000  
+    شیخ ایدبالی: "صبر فتح کی کنجی ہے۔"  
+
+    8  
+    00:00:31,000 --> 00:00:35,000  
+    عثمان سردار: "یہ زمینیں ہمارے خون سے سرسبز ہوں گی!"}."},
                     {"role": "user", "content": f"Translate this Turkish text to Urdu: {text}"},
                 ],
                 model="llama-3.3-70b-versatile",
@@ -217,12 +331,20 @@ def translate_text(text, api):
 def translate_srt(transcript_data, api):
     """Translates all the SRT data to Urdu using the selected API."""
     translated_srt = ""
-    for entry in transcript_data:
-        translated_text = translate_text(entry['text'], api)
+    total_lines = len(transcript_data)
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    for i, entry in enumerate(transcript_data):
+        request_no = i + 1
+        status_text.text(f"Processing line {request_no} of {total_lines}...")
+        translated_text = translate_text(entry['text'], api, request_no)
         if translated_text:
             translated_srt += f"{entry['start']} --> {entry['start'] + entry['duration']}\n{translated_text}\n\n"
         else:
             st.error(f"Failed to translate line: {entry['text']}")
+        progress_bar.progress((i + 1) / total_lines)
+
     return translated_srt
 
 # --- Main Function ---
