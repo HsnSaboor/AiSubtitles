@@ -1,10 +1,7 @@
 streamlit
-pytubefix
 youtube-transcript-api
 google-generativeai
-tqdm
-googletrans 
-pydub
-deep-translator
-httpx
+groq
+huggingface-hub
 yt-dlp
+httpx
