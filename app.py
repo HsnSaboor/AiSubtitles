@@ -10,10 +10,19 @@ import random
 import yt_dlp
 from google.api_core.exceptions import ResourceExhausted
 import httpx
+from groq import Groq
+from huggingface_hub import InferenceClient
 
-# Setup Gemini API
+# --- Setup APIs ---
+# Google AI Studio (Gemini)
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-model = genai.GenerativeModel('gemini-pro')
+gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+
+# Groq
+groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+
+# Hugging Face
+huggingface_client = InferenceClient(token=st.secrets["HUGGINGFACE_TOKEN"])
 
 # --- Utility Functions ---
 def extract_video_id(url):
@@ -180,335 +189,40 @@ def format_time(seconds):
     return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
 
 # --- Translation Functions ---
-def chunk_transcript(transcript_data, max_tokens=7000):
-    """
-    Chunks the transcript into segments less than max_tokens, avoiding split lines.
-    """
-    chunks = []
-    current_chunk = []
-    current_token_count = 0
+def translate_text(text, api):
+    """Translates text using the selected API."""
+    try:
+        if api == "Google AI Studio":
+            response = gemini_model.generate_content(f"Translate this Turkish text to Urdu: {text}")
+            return response.text
+        elif api == "Groq":
+            response = groq_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "You are a translator specializing in Turkish to Urdu translation."},
+                    {"role": "user", "content": f"Translate this Turkish text to Urdu: {text}"},
+                ],
+                model="llama-3.3-70b-versatile",
+            )
+            return response.choices[0].message.content
+        elif api == "Hugging Face":
+            response = huggingface_client.text_generation(
+                prompt=f"Translate this Turkish text to Urdu: {text}",
+                model="meta-llama/Meta-Llama-3-8B-Instruct",
+            )
+            return response
+    except Exception as e:
+        st.error(f"Translation failed with {api}: {e}")
+        return None
 
-    for line in transcript_data:
-        line_tokens = len(line['text'].split())
-        if current_token_count + line_tokens > max_tokens and current_chunk:
-            chunks.append(current_chunk)
-            current_chunk = []
-            current_token_count = 0
-
-        current_chunk.append(line)
-        current_token_count += line_tokens
-
-    if current_chunk:
-        chunks.append(current_chunk)
-
-    return chunks
-
-def translate_chunk(chunk, retry_queue, rate_limit_info, target_language="urdu", max_retries=3, llm_provider='gemini'):
-    """Translates a chunk of text to Urdu using the Gemini API with httpx."""
-    input_lines = [line['text'] for line in chunk]
-    input_json = json.dumps({"lines": input_lines})
-
-    prompt = f"""
-    You are an advanced AI translator specializing in converting Turkish historical drama subtitles into Urdu for a Pakistani audience. The input and output will be in JSON format, and your task is to:
-
-        Translate all dialogues and narration from Turkish to Urdu.
-        Ensure ranks, idioms, poetry, and cultural references are appropriately translated into Urdu.
-        Account for potential spelling errors in the Turkish input.
-        The JSON object you will be translating is:
-        {input_json}
-    Respond with a JSON object in the same format that has the translated subtitles as lines.
-    """
-    for attempt in range(max_retries):
-        if not rate_limit_info.can_send_request(llm_provider):
-            st.warning("Rate limit reached. Sleeping...")
-            time.sleep(60)
-            rate_limit_info.reset_rate_limits(llm_provider)
-            continue
-        try:
-            if llm_provider == 'gemini':
-                response = model.generate_content(prompt)
-                rate_limit_info.update_rate_limits(len(prompt.split()) + len(str(response).split()), llm_provider)
-
-                if response and response.text:
-                    try:
-                        json_response = json.loads(response.text)
-                        translated_lines = json_response.get('lines')
-
-                        if not translated_lines:
-                            st.warning(f"Invalid JSON format: 'lines' key missing, retrying request (attempt {attempt + 1}/{max_retries})")
-                            retry_queue.append(chunk)
-                            return None
-
-                        if len(translated_lines) != len(input_lines):
-                            st.warning(f"Line length mismatch, retrying request (attempt {attempt + 1}/{max_retries})")
-                            retry_queue.append(chunk)
-                            return None
-                        else:
-                            return translated_lines
-                    except json.JSONDecodeError:
-                        st.warning(f"Invalid JSON Response, retrying request (attempt {attempt + 1}/{max_retries})")
-                        retry_queue.append(chunk)
-                        return None
-                else:
-                    st.warning(f"Empty or invalid response received from API, retrying request (attempt {attempt + 1}/{max_retries})")
-                    retry_queue.append(chunk)
-                    return None
-
-            elif llm_provider == 'groq':
-                from groq import Groq
-                client = Groq(api_key=st.secrets["GROQ_API_KEY"])  # Create Groq client in each request
-                try:
-                    chat_completion = client.chat.completions.create(
-                        messages=[
-                            {"role": "system", "content": prompt},
-                        ],
-                        model="llama-3.3-70b-versatile",
-                        temperature=0,
-                        max_completion_tokens=8192,
-                        response_format={"type": "json_object"},
-                    )
-                    api_response_text = chat_completion.choices[0].message.content
-
-                    rate_limit_info.update_rate_limits(len(prompt.split()) + len(str(api_response_text).split()), llm_provider)
-
-                    try:
-                        json_response = json.loads(api_response_text)
-                        translated_lines = json_response.get('lines')
-                        if not translated_lines:
-                            st.warning(f"Invalid JSON format: 'lines' key missing, retrying request (attempt {attempt + 1}/{max_retries})")
-                            retry_queue.append(chunk)
-                            return None
-                        if len(translated_lines) != len(input_lines):
-                            st.warning(f"Line length mismatch, retrying request (attempt {attempt + 1}/{max_retries})")
-                            retry_queue.append(chunk)
-                            return None
-                        else:
-                            return translated_lines
-                    except json.JSONDecodeError:
-                        st.warning(f"Invalid JSON Response, retrying request (attempt {attempt + 1}/{max_retries})")
-                        retry_queue.append(chunk)
-                        return None
-                except Exception as e:
-                    st.error(f"Groq API error : {e}, retrying request (attempt {attempt + 1}/{max_retries})")
-                    retry_queue.append(chunk)
-                    continue
-            elif llm_provider == 'huggingface':
-                api_url = "https://api-inference.huggingface.co/models/meta-llama/Llama-3-70B-Instruct"
-                headers = {
-                    "Authorization": f"Bearer {st.secrets['HUGGINGFACE_TOKEN']}",
-                    "Content-Type": "application/json"
-                }
-                data = {
-                    "inputs": prompt,
-                    "options": {"wait_for_model": True},
-                    "parameters": {"max_new_tokens": 8192}
-                }
-                try:
-                    with httpx.Client() as client:
-                        response = client.post(api_url, headers=headers, json=data)
-                        response.raise_for_status()
-                        response_json = response.json()
-                        if response_json and isinstance(response_json, list) and len(response_json) > 0:
-                            api_response_text = response_json[0]['generated_text']
-                            rate_limit_info.update_rate_limits(len(prompt.split()) + len(str(api_response_text).split()), llm_provider)
-
-                            try:
-                                json_response = json.loads(api_response_text)
-                                translated_lines = json_response.get('lines')
-                                if not translated_lines:
-                                    st.warning(f"Invalid JSON format: 'lines' key missing, retrying request (attempt {attempt + 1}/{max_retries})")
-                                    retry_queue.append(chunk)
-                                    return None
-                                if len(translated_lines) != len(input_lines):
-                                    st.warning(f"Line length mismatch, retrying request (attempt {attempt + 1}/{max_retries})")
-                                    retry_queue.append(chunk)
-                                    return None
-                                else:
-                                    return translated_lines
-                            except json.JSONDecodeError:
-                                st.warning(f"Invalid JSON Response, retrying request (attempt {attempt + 1}/{max_retries})")
-                                retry_queue.append(chunk)
-                                return None
-                        else:
-                            st.warning(f"Empty or invalid response received from API, retrying request (attempt {attempt + 1}/{max_retries})")
-                            retry_queue.append(chunk)
-                            return None
-
-                except httpx.HTTPError as e:
-                    st.error(f"HTTP error with huggingface : {e}")
-                    retry_queue.append(chunk)
-                    continue
-
-            else:
-                st.error(f"Invalid model provided : {llm_provider}")
-                retry_queue.append(chunk)
-                return None
-
-        except ResourceExhausted as e:
-            st.error(f"API Quota Exceeded (429): {e}, retrying request (attempt {attempt + 1}/{max_retries})")
-            retry_queue.append(chunk)
-            delay = (2 ** attempt) + random.uniform(0, 1)  # exponential backoff with jitter
-            time.sleep(delay)
-            continue
-        except Exception as e:
-            st.error(f"An error occurred: {e}, retrying request (attempt {attempt + 1}/{max_retries})")
-            retry_queue.append(chunk)
-            time.sleep(random.uniform(1, 3))
-            continue
-
-    st.error(f"Failed to translate chunk after {max_retries} retries.")
-    return None
-
-class RateLimitInfo:
-    def __init__(self, max_requests_per_minute=15, max_tokens_per_minute=1_000_000, max_requests_per_day=1500):
-        self.max_requests_per_minute = {
-            'gemini': 15,
-            'huggingface': int(1000 / 60),  # Convert to integer
-            'groq': int(14400 / 60)  # Convert to integer
-        }
-        self.max_tokens_per_minute = {
-            'gemini': 1_000_000,
-            'huggingface': 100000,
-            'groq': 6000
-        }
-        self.max_requests_per_day = {
-            'gemini': 1500,
-            'huggingface': 1000,
-            'groq': 1000,
-        }
-
-        self.request_queue = {
-            'gemini': deque(maxlen=self.max_requests_per_minute['gemini']),
-            'huggingface': deque(maxlen=self.max_requests_per_minute['huggingface']),
-            'groq': deque(maxlen=self.max_requests_per_minute['groq'])
-        }
-        self.tokens_this_minute = {
-            'gemini': 0,
-            'huggingface': 0,
-            'groq': 0,
-        }
-        self.requests_today = {
-            'gemini': 0,
-            'huggingface': 0,
-            'groq': 0
-        }
-        self.last_reset_time = {
-            'gemini': time.time(),
-            'huggingface': time.time(),
-            'groq': time.time(),
-        }
-        self.daily_requests_made = {
-            'gemini': 0,
-            'huggingface': 0,
-            'groq': 0
-        }
-        self.last_reset_day = {
-            'gemini': time.time() // (24 * 3600),
-            'huggingface': time.time() // (24 * 3600),
-            'groq': time.time() // (24 * 3600),
-        }
-
-    def can_send_request(self, llm_provider):
-        now = time.time()
-        current_day = now // (24 * 3600)
-
-        if current_day > self.last_reset_day[llm_provider]:
-            self.reset_daily_request_count(llm_provider)  # Reset the daily requests when a new day starts
-
-        if now - self.last_reset_time[llm_provider] >= 60:
-            self.reset_rate_limits(llm_provider)
-
-        if len(self.request_queue[llm_provider]) >= self.max_requests_per_minute[llm_provider]:
-            return False
-
-        if self.daily_requests_made[llm_provider] >= self.max_requests_per_day[llm_provider]:
-            return False
-
-        return True
-
-    def update_rate_limits(self, tokens_used, llm_provider):
-        self.request_queue[llm_provider].append(time.time())
-        self.tokens_this_minute[llm_provider] += tokens_used
-        self.requests_today[llm_provider] += 1
-        self.daily_requests_made[llm_provider] += 1
-
-    def reset_rate_limits(self, llm_provider):
-        self.request_queue[llm_provider].clear()
-        self.tokens_this_minute[llm_provider] = 0
-        self.last_reset_time[llm_provider] = time.time()
-
-    def reset_daily_request_count(self, llm_provider):
-        self.daily_requests_made[llm_provider] = 0
-        self.last_reset_day[llm_provider] = time.time() // (24 * 3600)
-
-def translate_srt(transcript_data, rate_limit_info, selected_model='gemini'):
-    """
-    Translates all the srt data to Urdu using parallel requests.
-    """
-    chunks = chunk_transcript(transcript_data)
-    st.info(f"Created {len(chunks)} chunks for translation.")
-
-    # Display chunk info and create a progress bar
-    chunk_info_text = ""
-    for i, chunk in enumerate(chunks):
-        chunk_info_text += f"Chunk {i + 1}: {len(chunk)} lines, {sum(len(line['text'].split()) for line in chunk)} tokens\n"
-
-    st.text_area("Chunk Information", chunk_info_text)
-
-    progress_bar = st.progress(0)
-    translated_chunks = []
-    retry_queue = deque()
-
-    llm_providers = [selected_model, 'gemini']
-
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(translate_chunk, chunk, retry_queue, rate_limit_info, llm_provider=llm_provider) for chunk in chunks for llm_provider in [selected_model]]
-        results = [future.result() for future in futures]
-
-        for chunk, translated_lines in zip(chunks, results):
-            if translated_lines:
-                translated_chunks.append((chunk, translated_lines))
-            progress_bar.progress(len(translated_chunks) / len(chunks))
-
-    if len(translated_chunks) != len(chunks):
-        st.warning("Translation failed with selected model, retrying with other models...")
-
-        while llm_providers and len(translated_chunks) != len(chunks):
-            selected_model = llm_providers.pop(0)
-            st.info(f"Retrying with model {selected_model}")
-
-            retry_queue.extend([chunk for chunk, _ in translated_chunks if not _])
-            translated_chunks = [(chunk, lines) for chunk, lines in translated_chunks if lines]
-
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = [executor.submit(translate_chunk, chunk, retry_queue, rate_limit_info, llm_provider=selected_model) for chunk in chunks]
-                results = [future.result() for future in futures]
-
-                for chunk, translated_lines in zip(chunks, results):
-                    if translated_lines:
-                        for i, (original_chunk, _) in enumerate(translated_chunks):
-                            if original_chunk == chunk:
-                                translated_chunks[i] = (original_chunk, translated_lines)
-                                break
-                        else:
-                            translated_chunks.append((chunk, translated_lines))
-                    progress_bar.progress(len(translated_chunks) / len(chunks))
-        if len(translated_chunks) != len(chunks):
-            st.error("Translation failed with all the models, Please try again.  ")
-
-            st.text("Here are the splitted chunks and the system prompt that you can copy paste to do it manually on a model of your choice:")
-
-            for i, chunk in enumerate(chunks):
-                st.text(f"Chunk {i + 1} :")
-                for line in chunk:
-                    st.text(line['text'])
-
-    # Combine translated chunks into a single SRT
+def translate_srt(transcript_data, api):
+    """Translates all the SRT data to Urdu using the selected API."""
     translated_srt = ""
-    for chunk, translated_lines in translated_chunks:
-        for line, translated_line in zip(chunk, translated_lines):
-            translated_srt += f"{line['start']} --> {line['start'] + line['duration']}\n{translated_line}\n\n"
-
+    for entry in transcript_data:
+        translated_text = translate_text(entry['text'], api)
+        if translated_text:
+            translated_srt += f"{entry['start']} --> {entry['start'] + entry['duration']}\n{translated_text}\n\n"
+        else:
+            st.error(f"Failed to translate line: {entry['text']}")
     return translated_srt
 
 # --- Main Function ---
@@ -534,16 +248,13 @@ def main():
                     if st.checkbox("Show Original Transcript"):
                         st.text_area("Original Transcript", convert_to_srt(transcript_data), height=300)
 
-                    # Select translation model
-                    selected_model = st.selectbox("Select Translation Model", ["gemini", "groq", "huggingface"])
-
-                    # Initialize rate limit info
-                    rate_limit_info = RateLimitInfo()
+                    # Select translation API
+                    selected_api = st.selectbox("Select Translation API", ["Google AI Studio", "Groq", "Hugging Face"])
 
                     # Translate transcript
                     if st.button("Translate to Urdu"):
                         with st.spinner("Translating..."):
-                            translated_srt = translate_srt(transcript_data, rate_limit_info, selected_model)
+                            translated_srt = translate_srt(transcript_data, selected_api)
                             if translated_srt:
                                 st.success("Translation completed!")
                                 st.text_area("Translated Urdu Subtitles", translated_srt, height=300)
@@ -573,16 +284,13 @@ def main():
                 if st.checkbox("Show Original Transcript"):
                     st.text_area("Original Transcript", convert_to_srt(transcript_data), height=300)
 
-                # Select translation model
-                selected_model = st.selectbox("Select Translation Model", ["gemini", "groq", "huggingface"])
-
-                # Initialize rate limit info
-                rate_limit_info = RateLimitInfo()
+                # Select translation API
+                selected_api = st.selectbox("Select Translation API", ["Google AI Studio", "Groq", "Hugging Face"])
 
                 # Translate transcript
                 if st.button("Translate to Urdu"):
                     with st.spinner("Translating..."):
-                        translated_srt = translate_srt(transcript_data, rate_limit_info, selected_model)
+                        translated_srt = translate_srt(transcript_data, selected_api)
                         if translated_srt:
                             st.success("Translation completed!")
                             st.text_area("Translated Urdu Subtitles", translated_srt, height=300)
