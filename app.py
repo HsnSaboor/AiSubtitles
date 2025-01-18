@@ -6,7 +6,7 @@ import json
 import time
 from collections import deque
 import asyncio
-import aiohttp
+import httpx
 import random
 
 
@@ -144,8 +144,8 @@ def replace_ranks_titles(text):
         text = re.sub(pattern, replacement, text)
     return text
     
-async def async_translate_chunk(chunk, retry_queue, rate_limit_info, session, target_language="urdu", max_retries=3):
-    """Asynchronously translates a chunk of text to Urdu using the Gemini API."""
+async def async_translate_chunk(chunk, retry_queue, rate_limit_info, client, target_language="urdu", max_retries=3):
+    """Asynchronously translates a chunk of text to Urdu using the Gemini API with httpx."""
 
     input_lines = [line['text'] for line in chunk]
     input_json = json.dumps({"lines": input_lines})
@@ -273,10 +273,9 @@ async def async_translate_chunk(chunk, retry_queue, rate_limit_info, session, ta
             await asyncio.sleep(60)
             rate_limit_info.reset_rate_limits()
             continue
-        
+
         try:
-            
-           async with session.post(url="https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", json={
+            async with client.post(url="https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", json={
             "contents": [{
               "parts": [{
                   "text": prompt
@@ -284,24 +283,20 @@ async def async_translate_chunk(chunk, retry_queue, rate_limit_info, session, ta
               }]
             },headers={"x-goog-api-key":st.secrets["GOOGLE_API_KEY"]}) as response:
                 response.raise_for_status()
-                response_json = await response.json()
-                
-                
+                response_json = response.json()
                 
                 if response_json and "candidates" in response_json and response_json["candidates"] and 'content' in response_json["candidates"][0] and "parts" in response_json["candidates"][0]['content'] and response_json["candidates"][0]["content"]["parts"] and  'text' in response_json["candidates"][0]["content"]["parts"][0]:
-                   
                     api_response_text = response_json["candidates"][0]["content"]["parts"][0]['text']
-                
                     rate_limit_info.update_rate_limits(len(prompt.split())+len(str(api_response_text).split()))
                     try:
                         json_response = json.loads(api_response_text)
                         translated_lines = json_response.get('lines')
-    
+
                         if not translated_lines:
                             st.warning(f"Invalid JSON format: 'lines' key missing, retrying request (attempt {attempt+1}/{max_retries})")
                             retry_queue.append(chunk)
                             return None
-    
+
                         if len(translated_lines) != len(input_lines):
                             st.warning(f"Line length mismatch, retrying request (attempt {attempt+1}/{max_retries})")
                             retry_queue.append(chunk)
@@ -312,18 +307,16 @@ async def async_translate_chunk(chunk, retry_queue, rate_limit_info, session, ta
                         st.warning(f"Invalid JSON Response, retrying request (attempt {attempt+1}/{max_retries})")
                         retry_queue.append(chunk)
                         return None
-                
                 else:
-                    st.warning(f"Empty or invalid response received from API, retrying request (attempt {attempt+1}/{max_retries})")
-                    retry_queue.append(chunk)
-                    return None
+                     st.warning(f"Empty or invalid response received from API, retrying request (attempt {attempt+1}/{max_retries})")
+                     retry_queue.append(chunk)
+                     return None
 
         except Exception as e:
             st.error(f"An error occurred: {e}, retrying request (attempt {attempt+1}/{max_retries})")
             retry_queue.append(chunk)
             await asyncio.sleep(random.uniform(1,3))
             continue
-
     st.error(f"Failed to translate chunk after {max_retries} retries.")
     return None
 
@@ -371,7 +364,7 @@ async def translate_srt(transcript_data, rate_limit_info):
     # Display chunk info and create a progress bar
     chunk_info_text = ""
     for i, chunk in enumerate(chunks):
-         chunk_info_text+=f"Chunk {i + 1}: {len(chunk)} lines\n"
+        chunk_info_text+=f"Chunk {i + 1}: {len(chunk)} lines\n"
     
     st.text_area("Chunk Information", chunk_info_text)
 
@@ -379,8 +372,8 @@ async def translate_srt(transcript_data, rate_limit_info):
     translated_chunks = []
     retry_queue = deque()
 
-    async with aiohttp.ClientSession() as session:
-      tasks = [async_translate_chunk(chunk, retry_queue, rate_limit_info,session) for chunk in chunks]
+    async with httpx.AsyncClient() as client:
+      tasks = [async_translate_chunk(chunk, retry_queue, rate_limit_info,client) for chunk in chunks]
       results = await asyncio.gather(*tasks)
       
       for chunk,translated_lines in zip(chunks,results):
@@ -389,9 +382,10 @@ async def translate_srt(transcript_data, rate_limit_info):
           
           progress_bar.progress(len(translated_chunks)/len(chunks))
 
+
     while retry_queue:
          chunk = retry_queue.popleft()
-         translated_lines = await async_translate_chunk(chunk, retry_queue, rate_limit_info,session)
+         translated_lines = await async_translate_chunk(chunk, retry_queue, rate_limit_info,client)
          if translated_lines:
             for i,(original_chunk, _) in enumerate(translated_chunks):
                  if original_chunk == chunk:
