@@ -207,7 +207,7 @@ def translate_text(text, api):
         elif api == "Hugging Face":
             response = huggingface_client.text_generation(
                 prompt=f"Translate this Turkish text to Urdu: {text}",
-                model="meta-llama/Meta-Llama-3-8B-Instruct",
+                model="meta-llama/Meta-Llama-3.1-70B-Instruct",
             )
             return response
     except Exception as e:
