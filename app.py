@@ -23,22 +23,32 @@ def extract_video_id(url):
         return None
 
 def fetch_transcript(video_id):
-    """Fetches transcript data from YouTube."""
+    """Fetches transcript data from YouTube, prioritizing manual transcripts."""
     try:
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+        # Try to get a manually created Turkish transcript
         if 'tr' in transcript_list._manually_created_transcripts:
             transcript = transcript_list.find_manually_created_transcript(['tr'])
             st.success("Turkish manually created transcript found.")
+            transcript_data = transcript.fetch()
+            return transcript_data
+        #Try to get a manually created English transcript
         elif 'en' in transcript_list._manually_created_transcripts:
-             transcript = transcript_list.find_manually_created_transcript(['en'])
-             st.success("English manually created transcript found.")   
+            transcript = transcript_list.find_manually_created_transcript(['en'])
+            st.success("English manually created transcript found.")
+            transcript_data = transcript.fetch()
+            return transcript_data
+         #Try to get auto generated turkish transcript
+        elif 'tr' in transcript_list._generated_transcripts:
+            transcript = transcript_list.find_generated_transcript(['tr'])
+            st.success("Turkish auto-generated transcript found.")
+            transcript_data = transcript.fetch()
+            return transcript_data
         else:
-            st.error("No manually created transcripts found in Turkish or English.")
+            st.error("No manually created or auto-generated transcripts found in Turkish or English.")
             return None
-
-        transcript_data = transcript.fetch()
-        return transcript_data
-
+    
     except TranscriptsDisabled:
         st.error("Transcripts are disabled for this video.")
         return None
