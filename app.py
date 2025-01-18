@@ -120,27 +120,6 @@ def fetch_transcript_yt_dlp(video_id):
         st.error(f"An error occurred in yt_dlp fallback method: {e}")
         return None
 
-def convert_to_srt(transcript_data):
-    """Converts transcript data to SRT format."""
-    srt_content = ""
-    for i, entry in enumerate(transcript_data):
-        start = entry['start']
-        duration = entry['duration']
-        end = start + duration
-        text = entry['text']
-        srt_content += f"{i + 1}\n"
-        srt_content += f"{format_time(start)} --> {format_time(end)}\n"
-        srt_content += f"{text}\n\n"
-    return srt_content
-
-def format_time(seconds):
-    """Converts seconds to SRT time format."""
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    millis = int((seconds - int(seconds)) * 1000)
-    return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
-
 def parse_srt(srt_content):
     """Parses the SRT content and returns the list of transcript dictionaries."""
     lines = srt_content.strip().split("\n")
@@ -179,17 +158,31 @@ def time_to_seconds(time_str):
     seconds, milliseconds = seconds_milliseconds.split(",")
     return int(hours) * 3600 + int(minutes) * 60 + int(seconds) + int(milliseconds) / 1000
 
+def convert_to_srt(transcript_data):
+    """Converts transcript data to SRT format."""
+    srt_content = ""
+    for i, entry in enumerate(transcript_data):
+        start = entry['start']
+        duration = entry['duration']
+        end = start + duration
+        text = entry['text']
+        srt_content += f"{i + 1}\n"
+        srt_content += f"{format_time(start)} --> {format_time(end)}\n"
+        srt_content += f"{text}\n\n"
+    return srt_content
+
+def format_time(seconds):
+    """Converts seconds to SRT time format."""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds - int(seconds)) * 1000)
+    return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
+
 # --- Translation Functions ---
 def chunk_transcript(transcript_data, max_tokens=7000):
     """
     Chunks the transcript into segments less than max_tokens, avoiding split lines.
-
-    Args:
-        transcript_data: List of dictionary entries, each entry has start, duration, and text.
-        max_tokens: The maximum token count for each chunk.
-
-    Returns:
-        list of list of transcript lines
     """
     chunks = []
     current_chunk = []
@@ -210,21 +203,8 @@ def chunk_transcript(transcript_data, max_tokens=7000):
 
     return chunks
 
-def replace_ranks_titles(text):
-    """Replaces Turkish ranks and titles with Urdu equivalents."""
-    replacements = {
-        r"\bBey\b": "سردار",
-        r"\bSultan\b": "سلطان",
-        r"\bAlp\b": "سپاہی",
-        r"\bŞeyh\b": "شیخ"
-    }
-    for pattern, replacement in replacements.items():
-        text = re.sub(pattern, replacement, text)
-    return text
-
 def translate_chunk(chunk, retry_queue, rate_limit_info, target_language="urdu", max_retries=3, llm_provider='gemini'):
     """Translates a chunk of text to Urdu using the Gemini API with httpx."""
-
     input_lines = [line['text'] for line in chunk]
     input_json = json.dumps({"lines": input_lines})
 
@@ -237,112 +217,6 @@ def translate_chunk(chunk, retry_queue, rate_limit_info, target_language="urdu",
         The JSON object you will be translating is:
         {input_json}
     Respond with a JSON object in the same format that has the translated subtitles as lines.
-
-    Detailed Instructions:
-
-    Translate Ranks and Titles:
-    Replace Turkish ranks with culturally relevant Urdu equivalents:
-    "Bey" → "سردار"
-    "Sultan" → "سلطان"
-    "Alp" → "سپاہی" or "مجاہد"
-    "Şeyh" → "شیخ"
-
-    Poetry and Idioms:
-    Translate poetry, idiomatic expressions, and figures of speech in a way that preserves their emotional and poetic impact.
-
-    Handle Spelling Errors:
-    Correct common spelling errors in Turkish input. For example:
-        "Osmalı" → "Osmanlı"
-        "By" → "Bey"
-
-    Examples of Turkish Input and Urdu Output:
-    Example 1:
-
-    Turkish SRT Input:
-
-    1  
-    00:00:01,000 --> 00:00:04,000  
-    Bugün savaş meydanında kanımızı akıtacağız!  
-
-    2  
-    00:00:05,000 --> 00:00:08,000  
-    Osmanlı'nın adını yaşatmak için öleceğiz.  
-
-    Urdu SRT Output:
-
-    1  
-    00:00:01,000 --> 00:00:04,000  
-    آج ہم جنگ کے میدان میں اپنا خون بہائیں گے!  
-
-    2  
-    00:00:05,000 --> 00:00:08,000  
-    عثمانی کے نام کو زندہ رکھنے کے لئے جان دیں گے۔  
-
-    Example 2:
-
-    Turkish SRT Input (with spelling errors):
-
-    3  
-    00:00:09,000 --> 00:00:12,000  
-    Byler, zafere giden yol buradan geçer!  
-
-    4  
-    00:00:13,000 --> 00:00:16,000  
-    Şimdi savaşmaya hazır olun!  
-
-    Urdu SRT Output:
-
-    3  
-    00:00:09,000 --> 00:00:12,000  
-    سرداروں، فتح کا راستہ یہیں سے گزرتا ہے!  
-
-    4  
-    00:00:13,000 --> 00:00:16,000  
-    اب جنگ کے لئے تیار ہو جاؤ!  
-
-    Example 3:
-
-    Turkish SRT Input (with poetry):
-
-    5  
-    00:00:17,000 --> 00:00:21,000  
-    Adaletin ağacı kanla beslenir, ama zulüm de bir gün düşer.  
-
-    6  
-    00:00:22,000 --> 00:00:26,000  
-    Herkes, Osman Bey’in adaletine şahit olacak!  
-
-    Urdu SRT Output:
-
-    5  
-    00:00:17,000 --> 00:00:21,000  
-    انصاف کا درخت خون سے سینچا جاتا ہے، لیکن ظلم بھی ایک دن گر جاتا ہے۔  
-
-    6  
-    00:00:22,000 --> 00:00:26,000  
-    ہر کوئی عثمان سردار کے انصاف کا گواہ بنے گا!  
-
-    Example 4:
-
-    Turkish SRT Input (with cultural references):
-
-    7  
-    00:00:27,000 --> 00:00:30,000  
-    Şeyh Edebali: “Sabır, zaferin anahtarıdır.”  
-
-    8  
-    00:00:31,000 --> 00:00:35,000  
-    Osman Bey: “Bu topraklar bizim kanımızla yeşerecek!”  
-
-    Urdu SRT Output:
-
-    7  
-    00:00:27,000 --> 00:00:30,000  
-    شیخ ایدبالی: "صبر فتح کی کنجی ہے۔"  
-
-    8  
-    00:00:31,000 --> 00:00:35,000  
-    عثمان سردار: "یہ زمینیں ہمارے خون سے سرسبز ہوں گی!"
     """
     for attempt in range(max_retries):
         if not rate_limit_info.can_send_request(llm_provider):
@@ -641,18 +515,59 @@ def translate_srt(transcript_data, rate_limit_info, selected_model='gemini'):
 def main():
     st.title("YouTube Turkish to Urdu Subtitle Translator")
 
-    # Input for YouTube URL
-    youtube_url = st.text_input("Enter YouTube Video URL:")
+    # Input for YouTube URL or file upload
+    option = st.radio("Choose input method:", ("YouTube URL", "Upload Subtitle File (SRT)"))
 
-    if youtube_url:
-        video_id = extract_video_id(youtube_url)
-        if video_id:
-            st.info(f"Extracted Video ID: {video_id}")
+    if option == "YouTube URL":
+        youtube_url = st.text_input("Enter YouTube Video URL:")
+        if youtube_url:
+            video_id = extract_video_id(youtube_url)
+            if video_id:
+                st.info(f"Extracted Video ID: {video_id}")
 
-            # Fetch transcript
-            transcript_data = fetch_transcript(video_id)
+                # Fetch transcript
+                transcript_data = fetch_transcript(video_id)
+                if transcript_data:
+                    st.success("Transcript fetched successfully!")
+
+                    # Display original transcript
+                    if st.checkbox("Show Original Transcript"):
+                        st.text_area("Original Transcript", convert_to_srt(transcript_data), height=300)
+
+                    # Select translation model
+                    selected_model = st.selectbox("Select Translation Model", ["gemini", "groq", "huggingface"])
+
+                    # Initialize rate limit info
+                    rate_limit_info = RateLimitInfo()
+
+                    # Translate transcript
+                    if st.button("Translate to Urdu"):
+                        with st.spinner("Translating..."):
+                            translated_srt = translate_srt(transcript_data, rate_limit_info, selected_model)
+                            if translated_srt:
+                                st.success("Translation completed!")
+                                st.text_area("Translated Urdu Subtitles", translated_srt, height=300)
+
+                                # Download translated SRT file
+                                st.download_button(
+                                    label="Download Translated SRT",
+                                    data=translated_srt,
+                                    file_name="translated_subtitles.srt",
+                                    mime="text/srt"
+                                )
+                            else:
+                                st.error("Translation failed. Please try again.")
+                else:
+                    st.error("Failed to fetch transcript.")
+            else:
+                st.error("Invalid YouTube URL.")
+    else:
+        uploaded_file = st.file_uploader("Upload Subtitle File (SRT)", type=["srt"])
+        if uploaded_file:
+            srt_content = uploaded_file.read().decode("utf-8")
+            transcript_data = parse_srt(srt_content)
             if transcript_data:
-                st.success("Transcript fetched successfully!")
+                st.success("Subtitle file uploaded and parsed successfully!")
 
                 # Display original transcript
                 if st.checkbox("Show Original Transcript"):
@@ -682,9 +597,7 @@ def main():
                         else:
                             st.error("Translation failed. Please try again.")
             else:
-                st.error("Failed to fetch transcript.")
-        else:
-            st.error("Invalid YouTube URL.")
+                st.error("Failed to parse the uploaded subtitle file.")
 
 if __name__ == "__main__":
     main()
