@@ -10,6 +10,7 @@ import random
 import yt_dlp
 from google.api_core.exceptions import ResourceExhausted
 import httpx
+import base64
 
 # Setup Gemini API
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -698,7 +699,7 @@ def translate_srt(transcript_data, rate_limit_info, selected_model='gemini'):
     # Display chunk info and create a progress bar
     chunk_info_text = ""
     for i, chunk in enumerate(chunks):
-        chunk_info_text+=f"Chunk {i + 1}: {len(chunk)} lines\n"
+        chunk_info_text+=f"Chunk {i + 1}: {len(chunk)} lines, {sum(len(line['text'].split()) for line in chunk)} tokens\n"
     
     st.text_area("Chunk Information", chunk_info_text)
 
