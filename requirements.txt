@@ -1,7 +1,7 @@
 streamlit
 pytubefix
 youtube-transcript-api
-groq
+google-generativeai
 tqdm
 googletrans 
 pydub
