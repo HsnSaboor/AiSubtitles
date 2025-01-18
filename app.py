@@ -8,7 +8,7 @@ from collections import deque
 
 # Setup Gemini API
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])  # Make sure you have the API key set in secrets.toml
-model = genai.GenerativeModel('gemini-2.0-flash')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 
 # --- Utility Functions ---
