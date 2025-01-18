@@ -7,3 +7,4 @@ googletrans
 pydub
 deep-translator
 httpx
+yt-dlp
