@@ -8,10 +8,12 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 import random
 import yt_dlp
+from google.api_core.exceptions import ResourceExhausted
+
 
 # Setup Gemini API
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-pro')
 
 # --- Utility Functions ---
 def extract_video_id(url):
@@ -379,6 +381,12 @@ def translate_chunk(chunk, retry_queue, rate_limit_info, target_language="urdu",
                 retry_queue.append(chunk)
                 return None
 
+        except ResourceExhausted as e:
+              st.error(f"API Quota Exceeded (429): {e}, retrying request (attempt {attempt+1}/{max_retries})")
+              retry_queue.append(chunk)
+              delay = (2 ** attempt) + random.uniform(0, 1) #exponential backoff with jitter
+              time.sleep(delay)
+              continue
         except Exception as e:
             st.error(f"An error occurred: {e}, retrying request (attempt {attempt + 1}/{max_retries})")
             retry_queue.append(chunk)
@@ -397,17 +405,24 @@ class RateLimitInfo:
         self.tokens_this_minute = 0
         self.requests_today = 0
         self.last_reset_time = time.time()
+        self.daily_requests_made = 0  # Track the daily request limit
+        self.last_reset_day = time.time() // (24 * 3600) # Get the day number
 
     def can_send_request(self):
         now = time.time()
+        current_day = now // (24*3600)
+
+        if current_day > self.last_reset_day:
+          self.reset_daily_request_count() # Reset the daily requests when a new day starts
+        
         if now - self.last_reset_time >= 60:
             self.reset_rate_limits()
 
         if len(self.request_queue) >= self.max_requests_per_minute:
             return False
-
-        if self.requests_today >= self.max_requests_per_day:
-           return False
+        
+        if self.daily_requests_made >= self.max_requests_per_day:
+          return False
 
         return True
 
@@ -415,12 +430,16 @@ class RateLimitInfo:
         self.request_queue.append(time.time())
         self.tokens_this_minute += tokens_used
         self.requests_today += 1
+        self.daily_requests_made +=1
 
     def reset_rate_limits(self):
         self.request_queue.clear()
         self.tokens_this_minute = 0
         self.last_reset_time = time.time()
-
+    
+    def reset_daily_request_count(self):
+        self.daily_requests_made = 0
+        self.last_reset_day = time.time() // (24*3600)
 
 def translate_srt(transcript_data, rate_limit_info):
     """
