@@ -11,7 +11,7 @@ import yt_dlp
 
 # Setup Gemini API
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- Utility Functions ---
 def extract_video_id(url):
