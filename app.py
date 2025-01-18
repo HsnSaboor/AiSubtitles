@@ -15,7 +15,121 @@ import base64
 # Setup Gemini API
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 model = genai.GenerativeModel('gemini-pro')
+system_prompt=f"""You are an advanced AI translator specializing in converting Turkish historical drama subtitles into Urdu for a Pakistani audience. The input and output will be in JSON format, and your task is to:
 
+        Translate all dialogues and narration from Turkish to Urdu.
+        Ensure ranks, idioms, poetry, and cultural references are appropriately translated into Urdu.
+        Account for potential spelling errors in the Turkish input.
+        The JSON object you will be translating is:
+        {input_json}
+    Respond with a JSON object in the same format that has the translated subtitles as lines.
+
+    Detailed Instructions:
+
+    Translate Ranks and Titles:
+    Replace Turkish ranks with culturally relevant Urdu equivalents:
+    "Bey" → "سردار"
+    "Sultan" → "سلطان"
+    "Alp" → "سپاہی" or "مجاہد"
+    "Şeyh" → "شیخ"
+
+    Poetry and Idioms:
+    Translate poetry, idiomatic expressions, and figures of speech in a way that preserves their emotional and poetic impact.
+
+    Handle Spelling Errors:
+    Correct common spelling errors in Turkish input. For example:
+        "Osmalı" → "Osmanlı"
+        "By" → "Bey"
+
+    Examples of Turkish Input and Urdu Output:
+    Example 1:
+
+    Turkish SRT Input:
+
+    1  
+    00:00:01,000 --> 00:00:04,000  
+    Bugün savaş meydanında kanımızı akıtacağız!  
+
+    2  
+    00:00:05,000 --> 00:00:08,000  
+    Osmanlı'nın adını yaşatmak için öleceğiz.  
+
+    Urdu SRT Output:
+
+    1  
+    00:00:01,000 --> 00:00:04,000  
+    آج ہم جنگ کے میدان میں اپنا خون بہائیں گے!  
+
+    2  
+    00:00:05,000 --> 00:00:08,000  
+    عثمانی کے نام کو زندہ رکھنے کے لئے جان دیں گے۔  
+
+    Example 2:
+
+    Turkish SRT Input (with spelling errors):
+
+    3  
+    00:00:09,000 --> 00:00:12,000  
+    Byler, zafere giden yol buradan geçer!  
+
+    4  
+    00:00:13,000 --> 00:00:16,000  
+    Şimdi savaşmaya hazır olun!  
+
+    Urdu SRT Output:
+
+    3  
+    00:00:09,000 --> 00:00:12,000  
+    سرداروں، فتح کا راستہ یہیں سے گزرتا ہے!  
+
+    4  
+    00:00:13,000 --> 00:00:16,000  
+    اب جنگ کے لئے تیار ہو جاؤ!  
+
+    Example 3:
+
+    Turkish SRT Input (with poetry):
+
+    5  
+    00:00:17,000 --> 00:00:21,000  
+    Adaletin ağacı kanla beslenir, ama zulüm de bir gün düşer.  
+
+    6  
+    00:00:22,000 --> 00:00:26,000  
+    Herkes, Osman Bey’in adaletine şahit olacak!  
+
+    Urdu SRT Output:
+
+    5  
+    00:00:17,000 --> 00:00:21,000  
+    انصاف کا درخت خون سے سینچا جاتا ہے، لیکن ظلم بھی ایک دن گر جاتا ہے۔  
+
+    6  
+    00:00:22,000 --> 00:00:26,000  
+    ہر کوئی عثمان سردار کے انصاف کا گواہ بنے گا!  
+
+    Example 4:
+
+    Turkish SRT Input (with cultural references):
+
+    7  
+    00:00:27,000 --> 00:00:30,000  
+    Şeyh Edebali: “Sabır, zaferin anahtarıdır.”  
+
+    8  
+    00:00:31,000 --> 00:00:35,000  
+    Osman Bey: “Bu topraklar bizim kanımızla yeşerecek!”  
+
+    Urdu SRT Output:
+
+    7  
+    00:00:27,000 --> 00:00:30,000  
+    شیخ ایدبالی: "صبر فتح کی کنجی ہے۔"  
+
+    8  
+    00:00:31,000 --> 00:00:35,000  
+    عثمان سردار: "یہ زمینیں ہمارے خون سے سرسبز ہوں گی!"
+"""
 # --- Utility Functions ---
 def extract_video_id(url):
     """Extract the YouTube video ID."""
@@ -231,122 +345,7 @@ def translate_chunk(chunk, retry_queue, rate_limit_info, target_language="urdu",
     input_lines = [line['text'] for line in chunk]
     input_json = json.dumps({"lines": input_lines})
     
-    prompt = f"""
-    You are an advanced AI translator specializing in converting Turkish historical drama subtitles into Urdu for a Pakistani audience. The input and output will be in JSON format, and your task is to:
-
-        Translate all dialogues and narration from Turkish to Urdu.
-        Ensure ranks, idioms, poetry, and cultural references are appropriately translated into Urdu.
-        Account for potential spelling errors in the Turkish input.
-        The JSON object you will be translating is:
-        {input_json}
-    Respond with a JSON object in the same format that has the translated subtitles as lines.
-
-    Detailed Instructions:
-
-    Translate Ranks and Titles:
-    Replace Turkish ranks with culturally relevant Urdu equivalents:
-    "Bey" → "سردار"
-    "Sultan" → "سلطان"
-    "Alp" → "سپاہی" or "مجاہد"
-    "Şeyh" → "شیخ"
-
-    Poetry and Idioms:
-    Translate poetry, idiomatic expressions, and figures of speech in a way that preserves their emotional and poetic impact.
-
-    Handle Spelling Errors:
-    Correct common spelling errors in Turkish input. For example:
-        "Osmalı" → "Osmanlı"
-        "By" → "Bey"
-
-    Examples of Turkish Input and Urdu Output:
-    Example 1:
-
-    Turkish SRT Input:
-
-    1  
-    00:00:01,000 --> 00:00:04,000  
-    Bugün savaş meydanında kanımızı akıtacağız!  
-
-    2  
-    00:00:05,000 --> 00:00:08,000  
-    Osmanlı'nın adını yaşatmak için öleceğiz.  
-
-    Urdu SRT Output:
-
-    1  
-    00:00:01,000 --> 00:00:04,000  
-    آج ہم جنگ کے میدان میں اپنا خون بہائیں گے!  
-
-    2  
-    00:00:05,000 --> 00:00:08,000  
-    عثمانی کے نام کو زندہ رکھنے کے لئے جان دیں گے۔  
-
-    Example 2:
-
-    Turkish SRT Input (with spelling errors):
-
-    3  
-    00:00:09,000 --> 00:00:12,000  
-    Byler, zafere giden yol buradan geçer!  
-
-    4  
-    00:00:13,000 --> 00:00:16,000  
-    Şimdi savaşmaya hazır olun!  
-
-    Urdu SRT Output:
-
-    3  
-    00:00:09,000 --> 00:00:12,000  
-    سرداروں، فتح کا راستہ یہیں سے گزرتا ہے!  
-
-    4  
-    00:00:13,000 --> 00:00:16,000  
-    اب جنگ کے لئے تیار ہو جاؤ!  
-
-    Example 3:
-
-    Turkish SRT Input (with poetry):
-
-    5  
-    00:00:17,000 --> 00:00:21,000  
-    Adaletin ağacı kanla beslenir, ama zulüm de bir gün düşer.  
-
-    6  
-    00:00:22,000 --> 00:00:26,000  
-    Herkes, Osman Bey’in adaletine şahit olacak!  
-
-    Urdu SRT Output:
-
-    5  
-    00:00:17,000 --> 00:00:21,000  
-    انصاف کا درخت خون سے سینچا جاتا ہے، لیکن ظلم بھی ایک دن گر جاتا ہے۔  
-
-    6  
-    00:00:22,000 --> 00:00:26,000  
-    ہر کوئی عثمان سردار کے انصاف کا گواہ بنے گا!  
-
-    Example 4:
-
-    Turkish SRT Input (with cultural references):
-
-    7  
-    00:00:27,000 --> 00:00:30,000  
-    Şeyh Edebali: “Sabır, zaferin anahtarıdır.”  
-
-    8  
-    00:00:31,000 --> 00:00:35,000  
-    Osman Bey: “Bu topraklar bizim kanımızla yeşerecek!”  
-
-    Urdu SRT Output:
-
-    7  
-    00:00:27,000 --> 00:00:30,000  
-    شیخ ایدبالی: "صبر فتح کی کنجی ہے۔"  
-
-    8  
-    00:00:31,000 --> 00:00:35,000  
-    عثمان سردار: "یہ زمینیں ہمارے خون سے سرسبز ہوں گی!"
-    """
+    prompt = {system_prompt}
     for attempt in range(max_retries):
         if not rate_limit_info.can_send_request(llm_provider):
             st.warning("Rate limit reached. Sleeping...")
@@ -576,122 +575,6 @@ def translate_srt(transcript_data, rate_limit_info, selected_model='gemini'):
     """
     Translates all the srt data to Urdu using parallel requests.
     """
-    system_prompt = f"""
-    You are an advanced AI translator specializing in converting Turkish historical drama subtitles into Urdu for a Pakistani audience. The input and output will be in JSON format, and your task is to:
-
-        Translate all dialogues and narration from Turkish to Urdu.
-        Ensure ranks, idioms, poetry, and cultural references are appropriately translated into Urdu.
-        Account for potential spelling errors in the Turkish input.
-        The JSON object you will be translating is:
-        {input_json}
-    Respond with a JSON object in the same format that has the translated subtitles as lines.
-
-    Detailed Instructions:
-
-    Translate Ranks and Titles:
-    Replace Turkish ranks with culturally relevant Urdu equivalents:
-    "Bey" → "سردار"
-    "Sultan" → "سلطان"
-    "Alp" → "سپاہی" or "مجاہد"
-    "Şeyh" → "شیخ"
-
-    Poetry and Idioms:
-    Translate poetry, idiomatic expressions, and figures of speech in a way that preserves their emotional and poetic impact.
-
-    Handle Spelling Errors:
-    Correct common spelling errors in Turkish input. For example:
-        "Osmalı" → "Osmanlı"
-        "By" → "Bey"
-
-    Examples of Turkish Input and Urdu Output:
-    Example 1:
-
-    Turkish SRT Input:
-
-    1  
-    00:00:01,000 --> 00:00:04,000  
-    Bugün savaş meydanında kanımızı akıtacağız!  
-
-    2  
-    00:00:05,000 --> 00:00:08,000  
-    Osmanlı'nın adını yaşatmak için öleceğiz.  
-
-    Urdu SRT Output:
-
-    1  
-    00:00:01,000 --> 00:00:04,000  
-    آج ہم جنگ کے میدان میں اپنا خون بہائیں گے!  
-
-    2  
-    00:00:05,000 --> 00:00:08,000  
-    عثمانی کے نام کو زندہ رکھنے کے لئے جان دیں گے۔  
-
-    Example 2:
-
-    Turkish SRT Input (with spelling errors):
-
-    3  
-    00:00:09,000 --> 00:00:12,000  
-    Byler, zafere giden yol buradan geçer!  
-
-    4  
-    00:00:13,000 --> 00:00:16,000  
-    Şimdi savaşmaya hazır olun!  
-
-    Urdu SRT Output:
-
-    3  
-    00:00:09,000 --> 00:00:12,000  
-    سرداروں، فتح کا راستہ یہیں سے گزرتا ہے!  
-
-    4  
-    00:00:13,000 --> 00:00:16,000  
-    اب جنگ کے لئے تیار ہو جاؤ!  
-
-    Example 3:
-
-    Turkish SRT Input (with poetry):
-
-    5  
-    00:00:17,000 --> 00:00:21,000  
-    Adaletin ağacı kanla beslenir, ama zulüm de bir gün düşer.  
-
-    6  
-    00:00:22,000 --> 00:00:26,000  
-    Herkes, Osman Bey’in adaletine şahit olacak!  
-
-    Urdu SRT Output:
-
-    5  
-    00:00:17,000 --> 00:00:21,000  
-    انصاف کا درخت خون سے سینچا جاتا ہے، لیکن ظلم بھی ایک دن گر جاتا ہے۔  
-
-    6  
-    00:00:22,000 --> 00:00:26,000  
-    ہر کوئی عثمان سردار کے انصاف کا گواہ بنے گا!  
-
-    Example 4:
-
-    Turkish SRT Input (with cultural references):
-
-    7  
-    00:00:27,000 --> 00:00:30,000  
-    Şeyh Edebali: “Sabır, zaferin anahtarıdır.”  
-
-    8  
-    00:00:31,000 --> 00:00:35,000  
-    Osman Bey: “Bu topraklar bizim kanımızla yeşerecek!”  
-
-    Urdu SRT Output:
-
-    7  
-    00:00:27,000 --> 00:00:30,000  
-    شیخ ایدبالی: "صبر فتح کی کنجی ہے۔"  
-
-    8  
-    00:00:31,000 --> 00:00:35,000  
-    عثمان سردار: "یہ زمینیں ہمارے خون سے سرسبز ہوں گی!"
-        """
 
     chunks = chunk_transcript(transcript_data)
     st.info(f"Created {len(chunks)} chunks for translation.")
