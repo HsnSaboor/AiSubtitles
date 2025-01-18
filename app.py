@@ -224,7 +224,7 @@ def replace_ranks_titles(text):
         text = re.sub(pattern, replacement, text)
     return text
     
-  def translate_chunk(chunk, retry_queue, rate_limit_info, target_language="urdu", max_retries=3, llm_provider='gemini'):
+def translate_chunk(chunk, retry_queue, rate_limit_info, target_language="urdu", max_retries=3, llm_provider='gemini'):
     """Translates a chunk of text to Urdu using the Gemini API with httpx."""
 
     input_lines = [line['text'] for line in chunk]
