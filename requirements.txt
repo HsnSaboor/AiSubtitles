@@ -1,7 +1,5 @@
 streamlit
 youtube-transcript-api
-google-generativeai
-groq
-huggingface-hub
+openai
 yt-dlp
 httpx
