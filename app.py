@@ -277,7 +277,7 @@ def translate_text(text, request_no):
     try:
         st.write(f"Request {request_no}: Translating line: {text}")
         response = client.chat.completions.create(
-            model="provider-4/gpt-4o",
+            model=model_name,
             messages=[
                 {"role": "user", "content": f"Translate this Turkish text to Urdu: {text}"}
             ]
