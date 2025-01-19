@@ -193,7 +193,7 @@ def translate_json_chunk(json_chunk, system_prompt, model="gpt-4o"):
     enc = tiktoken.encoding_for_model(model)
     input_json = json.dumps(json_chunk)
     input_tokens = len(enc.encode(input_json)) + len(enc.encode(system_prompt))
-    if input_tokens > 8000:
+    if input_tokens > 7800:
         raise ValueError("Input tokens exceed the limit for the model.")
     """Translates a chunk of JSON data using the specified LLM API."""
     try:
