@@ -303,7 +303,35 @@ def translate_srt(transcript_data):
 
     return translated_srt
 
-# --- Main Function ---
+# --- Helper Function ---
+def get_system_prompt():
+    return """
+    You are an advanced AI translator specializing in converting Turkish historical drama subtitles into Urdu for a Pakistani audience. The input and output will be in JSON format, and your task is to:
+
+    Translate all dialogues and narration from Turkish to Urdu.
+    Ensure ranks, idioms, poetry, and cultural references are appropriately translated into Urdu.
+    Account for potential spelling errors in the Turkish input.
+    The JSON object you will be translating is:
+    {input_json}
+    Respond with a JSON object in the same format that has the translated subtitles as lines.
+
+    Detailed Instructions:
+
+    Translate Ranks and Titles:
+    Replace Turkish ranks with culturally relevant Urdu equivalents:
+    "Bey" → "سردار"
+    "Sultan" → "سلطان"
+    "Alp" → "سپاہی" or "مجاہد"
+    "Şeyh" → "شیخ"
+
+    Poetry and Idioms:
+    Translate poetry, idiomatic expressions, and figures of speech in a way that preserves their emotional and poetic impact.
+
+    Handle Spelling Errors:
+    Correct common spelling errors in Turkish input. For example:
+    "Osmalı" → "Osmanlı"
+    "By" → "Bey"
+    """
 def main():
     st.title("YouTube Turkish to Urdu Subtitle Translator")
 
