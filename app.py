@@ -190,11 +190,16 @@ def format_time(seconds):
 
 # --- Translation Functions ---
 def translate_json_chunk(json_chunk, system_prompt, model="gpt-4o"):
+    enc = tiktoken.encoding_for_model(model)
+    input_json = json.dumps(json_chunk)
+    input_tokens = len(enc.encode(input_json)) + len(enc.encode(system_prompt))
+    if input_tokens > 8000:
+        raise ValueError("Input tokens exceed the limit for the model.")
     """Translates a chunk of JSON data using the specified LLM API."""
     try:
         input_json = json.dumps(json_chunk)
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="provider-4/gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"The JSON object you will be translating is: {input_json}"}
@@ -214,7 +219,11 @@ def translate_srt_to_json(srt_content, system_prompt):
 
     for i, chunk in enumerate(json_chunks):
         st.write(f"Translating chunk {i + 1} of {len(json_chunks)}...")
-        translated_chunk = translate_json_chunk(chunk, system_prompt, model_name)
+        try:
+            translated_chunk = translate_json_chunk(chunk, system_prompt, model_name)
+            translated_chunks.extend(translated_chunk)
+        except ValueError as e:
+            st.error(f"Failed to translate chunk {i + 1}: {e}")
         if translated_chunk:
             translated_chunks.extend(translated_chunk)
         else:
@@ -318,7 +327,7 @@ def translate_text(text, request_no):
     try:
         st.write(f"Request {request_no}: Translating line: {text}")
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="provider-4/gpt-4o",
             messages=[
                 {"role": "user", "content": f"Translate this Turkish text to Urdu: {text}"}
             ]
