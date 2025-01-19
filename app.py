@@ -313,20 +313,6 @@ def chunk_json(json_data, system_prompt, max_tokens=2000, model="gpt-4o"):
 
     return chunks
 
-def translate_text(text, request_no):
-    """Translates text using the specified LLM API."""
-    try:
-        st.write(f"Request {request_no}: Translating line: {text}")
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "user", "content": f"Translate this Turkish text to Urdu: {text}"}
-            ]
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        st.error(f"Translation failed: {e}")
-        return None
 
 def translate_srt(transcript_data):
     """Translates all the SRT data to Urdu using the specified LLM API."""
