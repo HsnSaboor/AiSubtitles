@@ -218,10 +218,6 @@ def translate_srt_to_json(srt_content, system_prompt):
             translated_chunks.extend(translated_chunk)
         except ValueError as e:
             st.error(f"Failed to translate chunk {i + 1}: {e}")
-        if translated_chunk:
-            translated_chunks.extend(translated_chunk)
-        else:
-            st.error(f"Failed to translate chunk {i + 1}")
 
     return translated_chunks
 
@@ -257,7 +253,7 @@ def srt_to_json(srt_content):
 
     return entries
 
-def chunk_json(json_data, system_prompt, max_tokens=3800, model="gpt-4o"):
+def chunk_json(json_data, system_prompt, max_tokens=7800, model="gpt-4o"):
     enc = tiktoken.encoding_for_model(model)
     chunks = []
     current_chunk = []
