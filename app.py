@@ -190,6 +190,7 @@ def translate_json_chunk(json_chunk, system_prompt, model="gpt-4o"):
     input_json = json.dumps(json_chunk)
     user_prompt = f"The JSON object you will be translating is: {input_json}"
     input_tokens = len(enc.encode(input_json)) + len(enc.encode(system_prompt)) + len(enc.encode(user_prompt))
+    st.write(f"Total input tokens: {input_tokens}")
     if input_tokens > 7800:
         raise ValueError("Input tokens exceed the limit for the model.")
     try:
@@ -254,7 +255,67 @@ def srt_to_json(srt_content):
 
     return entries
 
-def chunk_json(json_data, system_prompt, max_tokens=2000, model="gpt-4o"):
+def chunk_json(json_data, system_prompt, max_tokens=7800, model="gpt-4o"):
+    enc = tiktoken.encoding_for_model(model)
+    chunks = []
+    current_chunk = []
+    current_tokens = 0
+
+    user_prompt_template = "The JSON object you will be translating is: "
+
+    for entry in json_data:
+        entry_tokens = len(enc.encode(entry['text']))
+        if current_tokens + entry_tokens + len(enc.encode(system_prompt)) + len(enc.encode(user_prompt_template)) > max_tokens:
+            chunks.append(current_chunk)
+            current_chunk = []
+            current_tokens = 0
+
+        current_chunk.append(entry)
+        current_tokens += entry_tokens
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    # Recalculate chunks if total tokens exceed max_tokens
+    recalculated_chunks = []
+    for chunk in chunks:
+        chunk_tokens = len(enc.encode(json.dumps(chunk))) + len(enc.encode(system_prompt)) + len(enc.encode(user_prompt_template))
+        if chunk_tokens > max_tokens:
+            recalculated_chunks.extend(chunk_json(chunk, system_prompt, max_tokens, model))
+        else:
+            recalculated_chunks.append(chunk)
+
+    return recalculated_chunks
+    enc = tiktoken.encoding_for_model(model)
+    chunks = []
+    current_chunk = []
+    current_tokens = 0
+
+    user_prompt_template = "The JSON object you will be translating is: "
+
+    for entry in json_data:
+        entry_tokens = len(enc.encode(entry['text']))
+        if current_tokens + entry_tokens + len(enc.encode(system_prompt)) + len(enc.encode(user_prompt_template)) > max_tokens:
+            chunks.append(current_chunk)
+            current_chunk = []
+            current_tokens = 0
+
+        current_chunk.append(entry)
+        current_tokens += entry_tokens
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    # Recalculate chunks if total tokens exceed max_tokens
+    recalculated_chunks = []
+    for chunk in chunks:
+        chunk_tokens = len(enc.encode(json.dumps(chunk))) + len(enc.encode(system_prompt)) + len(enc.encode(user_prompt_template))
+        if chunk_tokens > max_tokens:
+            recalculated_chunks.extend(chunk_json(chunk, system_prompt, max_tokens, model))
+        else:
+            recalculated_chunks.append(chunk)
+
+    return recalculated_chunks
     enc = tiktoken.encoding_for_model(model)
     chunks = []
     current_chunk = []
@@ -313,6 +374,20 @@ def chunk_json(json_data, system_prompt, max_tokens=2000, model="gpt-4o"):
 
     return chunks
 
+def translate_text(text, request_no):
+    """Translates text using the specified LLM API."""
+    try:
+        st.write(f"Request {request_no}: Translating line: {text}")
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "user", "content": f"Translate this Turkish text to Urdu: {text}"}
+            ]
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        st.error(f"Translation failed: {e}")
+        return None
 
 def translate_srt(transcript_data):
     """Translates all the SRT data to Urdu using the specified LLM API."""
