@@ -214,7 +214,7 @@ def translate_json_chunk(json_chunk, system_prompt, model="gpt-4o"):
 def translate_srt_to_json(srt_content, system_prompt):
     """Translates SRT content to JSON format and returns the translated JSON."""
     json_data = srt_to_json(srt_content)
-    json_chunks = chunk_json(json_data)
+    json_chunks = chunk_json(json_data, system_prompt)
     translated_chunks = []
 
     for i, chunk in enumerate(json_chunks):
@@ -263,7 +263,7 @@ def srt_to_json(srt_content):
 
     return entries
 
-def chunk_json(json_data, max_tokens=3800, model="gpt-4o"):
+def chunk_json(json_data, system_prompt, max_tokens=3800, model="gpt-4o"):
     enc = tiktoken.encoding_for_model(model)
     chunks = []
     current_chunk = []
