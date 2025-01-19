@@ -10,6 +10,7 @@ import yt_dlp
 import tiktoken
 import os
 from openai import OpenAI
+import logging
 
 token = os.environ["GITHUB_TOKEN"]
 endpoint = "https://models.inference.ai.azure.com"
@@ -19,6 +20,9 @@ client = OpenAI(
     base_url=endpoint,
     api_key=token,
 )
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # --- Utility Functions ---
 def extract_video_id(url):
@@ -126,6 +130,7 @@ def fetch_transcript_yt_dlp(video_id):
         return None
 
 def parse_srt(srt_content):
+    logger.info("Parsing SRT content")
     """Parses the SRT content and returns the list of transcript dictionaries."""
     lines = srt_content.strip().split("\n")
     entries = []
@@ -186,6 +191,8 @@ def format_time(seconds):
 
 # --- Translation Functions ---
 def translate_json_chunk(json_chunk, system_prompt, model="gpt-4o"):
+    logger.info("Translating each chunk into JSON")
+    logger.info("Translating JSON chunk")
     enc = tiktoken.encoding_for_model(model)
     input_json = json.dumps(json_chunk)
     user_prompt = f"The JSON object you will be translating is: {input_json}"
@@ -199,15 +206,20 @@ def translate_json_chunk(json_chunk, system_prompt, model="gpt-4o"):
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"The JSON object you will be translating is: {input_json}"}
-            ]
+            ],
+            stream=True
         )
-        translated_json = json.loads(response.choices[0].message.content)
+        translated_json = ""
+        for chunk in response:
+            translated_json += chunk['choices'][0]['delta']['content']
+        translated_json = json.loads(translated_json)
         return translated_json
     except Exception as e:
         st.error(f"Translation failed: {e}")
         return None
 
 def translate_srt_to_json(srt_content, system_prompt):
+    logger.info("Translating SRT to JSON")
     """Translates SRT content to JSON format and returns the translated JSON."""
     json_data = srt_to_json(srt_content)
     json_chunks = chunk_json(json_data, system_prompt)
@@ -224,6 +236,10 @@ def translate_srt_to_json(srt_content, system_prompt):
     return translated_chunks
 
 def srt_to_json(srt_content):
+    logger.info("Converting SRT to JSON")
+    enc = tiktoken.encoding_for_model(model_name)
+    total_tokens = len(enc.encode(srt_content))
+    logger.info(f"Total tokens in original SRT: {total_tokens}")
     """Converts SRT content to JSON format."""
     lines = srt_content.strip().split("\n")
     entries = []
@@ -255,9 +271,9 @@ def srt_to_json(srt_content):
 
     return entries
 
-from token_count import TokenCount
-
 def chunk_json(json_data, system_prompt, max_tokens=7800, model="gpt-4o"):
+    logger.info("Splitting tokens into chunks")
+    logger.info("Chunking JSON data")
     tc = TokenCount(model_name=model)
     chunks = []
     current_chunk = []
@@ -289,95 +305,9 @@ def chunk_json(json_data, system_prompt, max_tokens=7800, model="gpt-4o"):
             recalculated_chunks.append(chunk)
 
     return recalculated_chunks
-    enc = tiktoken.encoding_for_model(model)
-    chunks = []
-    current_chunk = []
-    current_tokens = 0
-
-    user_prompt_template = "The JSON object you will be translating is: "
-
-    for entry in json_data:
-        entry_tokens = len(enc.encode(entry['text']))
-        if current_tokens + entry_tokens + len(enc.encode(system_prompt)) + len(enc.encode(user_prompt_template)) > max_tokens:
-            chunks.append(current_chunk)
-            current_chunk = []
-            current_tokens = 0
-
-        current_chunk.append(entry)
-        current_tokens += entry_tokens
-
-    if current_chunk:
-        chunks.append(current_chunk)
-
-    # Recalculate chunks if total tokens exceed max_tokens
-    recalculated_chunks = []
-    for chunk in chunks:
-        chunk_tokens = len(enc.encode(json.dumps(chunk))) + len(enc.encode(system_prompt)) + len(enc.encode(user_prompt_template))
-        if chunk_tokens > max_tokens:
-            recalculated_chunks.extend(chunk_json(chunk, system_prompt, max_tokens, model))
-        else:
-            recalculated_chunks.append(chunk)
-
-    return recalculated_chunks
-    enc = tiktoken.encoding_for_model(model)
-    chunks = []
-    current_chunk = []
-    current_tokens = 0
-
-    for entry in json_data:
-        entry_tokens = len(enc.encode(entry['text']))
-        if current_tokens + entry_tokens + len(enc.encode(system_prompt)) > max_tokens:
-            chunks.append(current_chunk)
-            current_chunk = []
-            current_tokens = 0
-
-        current_chunk.append(entry)
-        current_tokens += entry_tokens
-
-    if current_chunk:
-        chunks.append(current_chunk)
-
-    return chunks
-    enc = tiktoken.encoding_for_model(model)
-    chunks = []
-    current_chunk = []
-    current_tokens = 0
-
-    for entry in json_data:
-        entry_tokens = len(enc.encode(entry['text']))
-        if current_tokens + entry_tokens > max_tokens:
-            chunks.append(current_chunk)
-            current_chunk = []
-            current_tokens = 0
-
-        current_chunk.append(entry)
-        current_tokens += entry_tokens
-
-    if current_chunk:
-        chunks.append(current_chunk)
-
-    return chunks
-    """Splits JSON data into chunks of less than max_tokens tokens."""
-    chunks = []
-    current_chunk = []
-    current_tokens = 0
-
-    for entry in json_data:
-        entry_tokens = len(entry['text'].split())
-        if current_tokens + entry_tokens > max_tokens:
-            chunks.append(current_chunk)
-            current_chunk = []
-            current_tokens = 0
-
-        current_chunk.append(entry)
-        current_tokens += entry_tokens
-
-    if current_chunk:
-        chunks.append(current_chunk)
-
-    return chunks
 
 def translate_text(text, request_no):
+    logger.info(f"Translating text for request {request_no}")
     """Translates text using the specified LLM API."""
     try:
         st.write(f"Request {request_no}: Translating line: {text}")
@@ -393,6 +323,7 @@ def translate_text(text, request_no):
         return None
 
 def translate_srt(transcript_data):
+    logger.info("Translating entire SRT data")
     """Translates all the SRT data to Urdu using the specified LLM API."""
     translated_srt = ""
     total_lines = len(transcript_data)
@@ -440,6 +371,7 @@ def get_system_prompt():
     "By" → "Bey"
     """
 def main():
+    logger.info("Starting main function")
     st.title("YouTube Turkish to Urdu Subtitle Translator")
 
     # Input for YouTube URL or file upload
