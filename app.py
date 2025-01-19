@@ -191,7 +191,7 @@ def translate_json_chunk(json_chunk, system_prompt):
             model="provider-4/gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"The JSON object you will be translating is: {input_json}"}
+                {"role": "user", "content": f"The JSON object you will be translating to urdu is: {input_json}"}
             ]
         )
         translated_json = json.loads(response.choices[0].message.content)
@@ -437,80 +437,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-def main():
-    st.title("YouTube Turkish to Urdu Subtitle Translator")
 
-    # Input for YouTube URL or file upload
-    option = st.radio("Choose input method:", ("YouTube URL", "Upload Subtitle File (SRT)"), key="input_method")
-
-    if option == "YouTube URL":
-        youtube_url = st.text_input("Enter YouTube Video URL:")
-        if youtube_url:
-            video_id = extract_video_id(youtube_url)
-            if video_id:
-                st.info(f"Extracted Video ID: {video_id}")
-
-                # Fetch transcript
-                transcript_data = fetch_transcript(video_id)
-                if transcript_data:
-                    st.success("Transcript fetched successfully!")
-
-                    # Display original transcript
-                    if st.checkbox("Show Original Transcript"):
-                        st.text_area("Original Transcript", convert_to_srt(transcript_data), height=300)
-
-                    # Translate transcript
-                    if st.button("Translate to Urdu"):
-                        with st.spinner("Translating..."):
-                            translated_srt = translate_srt(transcript_data)
-                            if translated_srt:
-                                st.success("Translation completed!")
-                                st.text_area("Translated Urdu Subtitles", translated_srt, height=300)
-
-                                # Download translated SRT file
-                                st.download_button(
-                                    label="Download Translated SRT",
-                                    data=translated_srt,
-                                    file_name="translated_subtitles.srt",
-                                    mime="text/srt"
-                                )
-                            else:
-                                st.error("Translation failed. Please try again.")
-                else:
-                    st.error("Failed to fetch transcript.")
-            else:
-                st.error("Invalid YouTube URL.")
-    else:
-        uploaded_file = st.file_uploader("Upload Subtitle File (SRT)", type=["srt"])
-        if uploaded_file:
-            srt_content = uploaded_file.read().decode("utf-8")
-            transcript_data = parse_srt(srt_content)
-            if transcript_data:
-                st.success("Subtitle file uploaded and parsed successfully!")
-
-                # Display original transcript
-                if st.checkbox("Show Original Transcript"):
-                    st.text_area("Original Transcript", convert_to_srt(transcript_data), height=300)
-
-                # Translate transcript
-                if st.button("Translate to Urdu"):
-                    with st.spinner("Translating..."):
-                        translated_srt = translate_srt(transcript_data)
-                        if translated_srt:
-                            st.success("Translation completed!")
-                            st.text_area("Translated Urdu Subtitles", translated_srt, height=300)
-
-                            # Download translated SRT file
-                            st.download_button(
-                                label="Download Translated SRT",
-                                data=translated_srt,
-                                file_name="translated_subtitles.srt",
-                                mime="text/srt"
-                            )
-                        else:
-                            st.error("Translation failed. Please try again.")
-            else:
-                st.error("Failed to parse the uploaded subtitle file.")
-
-if __name__ == "__main__":
-    main()
