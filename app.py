@@ -291,6 +291,8 @@ def chunk_json(json_data, system_prompt, max_tokens=7800, model="gpt-4o"):
     for entry in json_data:
         entry_tokens = tc.num_tokens_from_string(entry['text'])
         if current_tokens + entry_tokens + tc.num_tokens_from_string(system_prompt) + tc.num_tokens_from_string(user_prompt_template) > max_tokens:
+            if not current_chunk:
+                raise ValueError("Single entry exceeds max token limit.")
             chunks.append(current_chunk)
             current_chunk = []
             current_tokens = 0
@@ -301,17 +303,7 @@ def chunk_json(json_data, system_prompt, max_tokens=7800, model="gpt-4o"):
     if current_chunk:
         chunks.append(current_chunk)
 
-    # Recalculate chunks if total tokens exceed max_tokens
-    recalculated_chunks = []
-    for chunk in chunks:
-        chunk_input_json = json.dumps(chunk)
-        chunk_tokens = tc.num_tokens_from_string(chunk_input_json) + tc.num_tokens_from_string(system_prompt) + tc.num_tokens_from_string(user_prompt_template)
-        if chunk_tokens > max_tokens:
-            recalculated_chunks.extend(chunk_json(chunk, system_prompt, max_tokens, model))
-        else:
-            recalculated_chunks.append(chunk)
-
-    return recalculated_chunks
+    return chunks
 
 def translate_text(text, request_no):
     logger.info(f"Translating text for request {request_no}")
