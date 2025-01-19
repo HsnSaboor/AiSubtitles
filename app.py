@@ -188,10 +188,10 @@ def translate_json_chunk(json_chunk, system_prompt):
     try:
         input_json = json.dumps(json_chunk)
         response = client.chat.completions.create(
-            model="provider-1/gpt-3.5-turbo",
+            model="provider-4/gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"The JSON object you will be translating to urdu is: {input_json}"}
+                {"role": "user", "content": f"The JSON object you will be translating is: {input_json}"}
             ]
         )
         translated_json = json.loads(response.choices[0].message.content)
@@ -318,61 +318,40 @@ def main():
                 st.info(f"Extracted Video ID: {video_id}")
 
                 # Fetch transcript
-                transcript_data = fetch_transcript(video_id)
-                if transcript_data:
-                    st.success("Transcript fetched successfully!")
-
-                    # Display original transcript
-                    if st.checkbox("Show Original Transcript"):
-                        st.text_area("Original Transcript", convert_to_srt(transcript_data), height=300)
-
-                    # Translate transcript
-                    if st.button("Translate to Urdu"):
-                        with st.spinner("Translating..."):
-                            system_prompt = """
-                            You are an advanced AI translator specializing in converting Turkish historical drama subtitles into Urdu for a Pakistani audience. The input and output will be in JSON format, and your task is to:
-
-                            Translate all dialogues and narration from Turkish to Urdu.
-                            Ensure ranks, idioms, poetry, and cultural references are appropriately translated into Urdu.
-                            Account for potential spelling errors in the Turkish input.
-                            The JSON object you will be translating is:
-                            {input_json}
-                            Respond with a JSON object in the same format that has the translated subtitles as lines.
-
-                            Detailed Instructions:
-
-                            Translate Ranks and Titles:
-                            Replace Turkish ranks with culturally relevant Urdu equivalents:
-                            "Bey" → "سردار"
-                            "Sultan" → "سلطان"
-                            "Alp" → "سپاہی" or "مجاہد"
-                            "Şeyh" → "شیخ"
-
-                            Poetry and Idioms:
-                            Translate poetry, idiomatic expressions, and figures of speech in a way that preserves their emotional and poetic impact.
-
-                            Handle Spelling Errors:
-                            Correct common spelling errors in Turkish input. For example:
-                            "Osmalı" → "Osmanlı"
-                            "By" → "Bey"
-                            """
-                            translated_json = translate_srt_to_json(convert_to_srt(transcript_data), system_prompt)
-                            if translated_json:
-                                st.success("Translation completed!")
-                                translated_srt = convert_to_srt(translated_json)
-                                st.text_area("Translated Urdu Subtitles", translated_srt, height=300)
-
-                                # Download translated SRT file
-                                st.download_button(
-                                    label="Download Translated SRT",
-                                    data=translated_srt,
-                                    file_name="translated_subtitles.srt",
-                                    mime="text/srt"
-                                )
-                            else:
-                                st.error("Translation failed. Please try again.")
+                if "transcript_data" not in st.session_state:
+                    transcript_data = fetch_transcript(video_id)
+                    if transcript_data:
+                        st.session_state.transcript_data = transcript_data
+                        st.success("Transcript fetched successfully!")
+                    else:
+                        st.error("Failed to fetch transcript.")
+                        return
                 else:
-                    st.error("Failed to fetch transcript.")
+                    transcript_data = st.session_state.transcript_data
+
+                # Display original transcript
+                if st.checkbox("Show Original Transcript"):
+                    st.text_area("Original Transcript", convert_to_srt(transcript_data), height=300)
+
+                # Translate transcript
+                if st.button("Translate to Urdu"):
+                    with st.spinner("Translating..."):
+                        system_prompt = get_system_prompt()
+                        translated_json = translate_srt_to_json(convert_to_srt(transcript_data), system_prompt)
+                        if translated_json:
+                            st.success("Translation completed!")
+                            translated_srt = convert_to_srt(translated_json)
+                            st.text_area("Translated Urdu Subtitles", translated_srt, height=300)
+
+                            # Download translated SRT file
+                            st.download_button(
+                                label="Download Translated SRT",
+                                data=translated_srt,
+                                file_name="translated_subtitles.srt",
+                                mime="text/srt"
+                            )
+                        else:
+                            st.error("Translation failed. Please try again.")
             else:
                 st.error("Invalid YouTube URL.")
     else:
@@ -390,33 +369,7 @@ def main():
                 # Translate transcript
                 if st.button("Translate to Urdu"):
                     with st.spinner("Translating..."):
-                        system_prompt = """
-                        You are an advanced AI translator specializing in converting Turkish historical drama subtitles into Urdu for a Pakistani audience. The input and output will be in JSON format, and your task is to:
-
-                        Translate all dialogues and narration from Turkish to Urdu.
-                        Ensure ranks, idioms, poetry, and cultural references are appropriately translated into Urdu.
-                        Account for potential spelling errors in the Turkish input.
-                        The JSON object you will be translating is:
-                        {input_json}
-                        Respond with a JSON object in the same format that has the translated subtitles as lines.
-
-                        Detailed Instructions:
-
-                        Translate Ranks and Titles:
-                        Replace Turkish ranks with culturally relevant Urdu equivalents:
-                        "Bey" → "سردار"
-                        "Sultan" → "سلطان"
-                        "Alp" → "سپاہی" or "مجاہد"
-                        "Şeyh" → "شیخ"
-
-                        Poetry and Idioms:
-                        Translate poetry, idiomatic expressions, and figures of speech in a way that preserves their emotional and poetic impact.
-
-                        Handle Spelling Errors:
-                        Correct common spelling errors in Turkish input. For example:
-                        "Osmalı" → "Osmanlı"
-                        "By" → "Bey"
-                        """
+                        system_prompt = get_system_prompt()
                         translated_json = translate_srt_to_json(srt_content, system_prompt)
                         if translated_json:
                             st.success("Translation completed!")
@@ -437,4 +390,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
