@@ -254,7 +254,7 @@ def srt_to_json(srt_content):
 
     return entries
 
-def chunk_json(json_data, system_prompt, max_tokens=7800, model="gpt-4o"):
+def chunk_json(json_data, system_prompt, max_tokens=7000, model="gpt-4o"):
     enc = tiktoken.encoding_for_model(model)
     chunks = []
     current_chunk = []
