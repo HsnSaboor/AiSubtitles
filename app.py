@@ -188,7 +188,8 @@ def format_time(seconds):
 def translate_json_chunk(json_chunk, system_prompt, model="gpt-4o"):
     enc = tiktoken.encoding_for_model(model)
     input_json = json.dumps(json_chunk)
-    input_tokens = len(enc.encode(input_json)) + len(enc.encode(system_prompt))
+    user_prompt = f"The JSON object you will be translating is: {input_json}"
+    input_tokens = len(enc.encode(input_json)) + len(enc.encode(system_prompt)) + len(enc.encode(user_prompt))
     if input_tokens > 7800:
         raise ValueError("Input tokens exceed the limit for the model.")
     try:
@@ -253,7 +254,7 @@ def srt_to_json(srt_content):
 
     return entries
 
-def chunk_json(json_data, system_prompt, max_tokens=7800, model="gpt-4o"):
+def chunk_json(json_data, system_prompt, max_tokens=7000, model="gpt-4o"):
     enc = tiktoken.encoding_for_model(model)
     chunks = []
     current_chunk = []
