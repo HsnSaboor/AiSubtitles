@@ -191,7 +191,7 @@ def translate_json_chunk(json_chunk, system_prompt):
     try:
         input_json = json.dumps(json_chunk)
         response = client.chat.completions.create(
-            model="provider-4/gpt-4o",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"The JSON object you will be translating is: {input_json}"}
