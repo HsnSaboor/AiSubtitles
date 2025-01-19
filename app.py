@@ -188,7 +188,7 @@ def translate_json_chunk(json_chunk, system_prompt):
     try:
         input_json = json.dumps(json_chunk)
         response = client.chat.completions.create(
-            model="provider-1/gemini-2.0-flash-exp",
+            model="provider-1/gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"The JSON object you will be translating to urdu is: {input_json}"}
