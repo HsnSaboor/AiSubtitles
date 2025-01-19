@@ -24,6 +24,13 @@ client = OpenAI(
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+class TokenCount:
+    def __init__(self, model_name):
+        self.enc = tiktoken.encoding_for_model(model_name)
+
+    def num_tokens_from_string(self, string):
+        return len(self.enc.encode(string))
+
 # --- Utility Functions ---
 def extract_video_id(url):
     """Extract the YouTube video ID."""
