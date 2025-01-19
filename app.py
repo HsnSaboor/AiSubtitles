@@ -7,15 +7,18 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 import random
 import yt_dlp
+import os
 from openai import OpenAI
 
 # Set up API key and base URL
-API_KEY = "Free-For-YT-Subscribers-@DevsDoCode-WatchFullVideo"
-BASE_URL = "https://api.ddc.xiolabs.xyz/v1"
+
+token = os.environ["GITHUB_TOKEN"]
+endpoint = "https://models.inference.ai.azure.com"
+model_name = "gpt-4o"
 
 client = OpenAI(
-    api_key=API_KEY,
-    base_url=BASE_URL
+    base_url=endpoint,
+    api_key=token,
 )
 
 # --- Utility Functions ---
@@ -248,7 +251,7 @@ def srt_to_json(srt_content):
 
     return entries
 
-def chunk_json(json_data, max_tokens=7800):
+def chunk_json(json_data, max_tokens=3800):
     """Splits JSON data into chunks of less than max_tokens tokens."""
     chunks = []
     current_chunk = []
