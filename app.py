@@ -11,6 +11,9 @@ import tiktoken
 import os
 from openai import OpenAI
 
+# Set up API key and base URL
+API_KEY = "Free-For-YT-Subscribers-@DevsDoCode-WatchFullVideo"
+BASE_URL = "https://api.ddc.xiolabs.xyz/v1"
 
 token = os.environ["GITHUB_TOKEN"]
 endpoint = "https://models.inference.ai.azure.com"
@@ -252,6 +255,25 @@ def srt_to_json(srt_content):
     return entries
 
 def chunk_json(json_data, max_tokens=3800, model="gpt-4o"):
+    enc = tiktoken.encoding_for_model(model)
+    chunks = []
+    current_chunk = []
+    current_tokens = 0
+
+    for entry in json_data:
+        entry_tokens = len(enc.encode(entry['text']))
+        if current_tokens + entry_tokens + len(enc.encode(system_prompt)) > max_tokens:
+            chunks.append(current_chunk)
+            current_chunk = []
+            current_tokens = 0
+
+        current_chunk.append(entry)
+        current_tokens += entry_tokens
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
     enc = tiktoken.encoding_for_model(model)
     chunks = []
     current_chunk = []
