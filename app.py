@@ -11,9 +11,6 @@ import tiktoken
 import os
 from openai import OpenAI
 
-# Set up API key and base URL
-API_KEY = "Free-For-YT-Subscribers-@DevsDoCode-WatchFullVideo"
-BASE_URL = "https://api.ddc.xiolabs.xyz/v1"
 
 token = os.environ["GITHUB_TOKEN"]
 endpoint = "https://models.inference.ai.azure.com"
@@ -194,7 +191,7 @@ def translate_json_chunk(json_chunk, system_prompt, model="gpt-4o"):
     try:
         input_json = json.dumps(json_chunk)
         response = client.chat.completions.create(
-            model="provider-4/gpt-4o",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"The JSON object you will be translating is: {input_json}"}
