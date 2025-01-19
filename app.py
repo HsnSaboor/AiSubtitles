@@ -7,10 +7,13 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 import random
 import yt_dlp
+import tiktoken
 import os
 from openai import OpenAI
 
 # Set up API key and base URL
+API_KEY = "Free-For-YT-Subscribers-@DevsDoCode-WatchFullVideo"
+BASE_URL = "https://api.ddc.xiolabs.xyz/v1"
 
 token = os.environ["GITHUB_TOKEN"]
 endpoint = "https://models.inference.ai.azure.com"
@@ -186,12 +189,12 @@ def format_time(seconds):
     return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
 
 # --- Translation Functions ---
-def translate_json_chunk(json_chunk, system_prompt):
+def translate_json_chunk(json_chunk, system_prompt, model="gpt-4o"):
     """Translates a chunk of JSON data using the specified LLM API."""
     try:
         input_json = json.dumps(json_chunk)
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="provider-4/gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"The JSON object you will be translating is: {input_json}"}
@@ -211,7 +214,7 @@ def translate_srt_to_json(srt_content, system_prompt):
 
     for i, chunk in enumerate(json_chunks):
         st.write(f"Translating chunk {i + 1} of {len(json_chunks)}...")
-        translated_chunk = translate_json_chunk(chunk, system_prompt)
+        translated_chunk = translate_json_chunk(chunk, system_prompt, model_name)
         if translated_chunk:
             translated_chunks.extend(translated_chunk)
         else:
@@ -251,7 +254,26 @@ def srt_to_json(srt_content):
 
     return entries
 
-def chunk_json(json_data, max_tokens=3800):
+def chunk_json(json_data, max_tokens=3800, model="gpt-4o"):
+    enc = tiktoken.encoding_for_model(model)
+    chunks = []
+    current_chunk = []
+    current_tokens = 0
+
+    for entry in json_data:
+        entry_tokens = len(enc.encode(entry['text']))
+        if current_tokens + entry_tokens > max_tokens:
+            chunks.append(current_chunk)
+            current_chunk = []
+            current_tokens = 0
+
+        current_chunk.append(entry)
+        current_tokens += entry_tokens
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
     """Splits JSON data into chunks of less than max_tokens tokens."""
     chunks = []
     current_chunk = []
@@ -277,7 +299,7 @@ def translate_text(text, request_no):
     try:
         st.write(f"Request {request_no}: Translating line: {text}")
         response = client.chat.completions.create(
-            model=model_name,
+            model="gpt-4o",
             messages=[
                 {"role": "user", "content": f"Translate this Turkish text to Urdu: {text}"}
             ]
