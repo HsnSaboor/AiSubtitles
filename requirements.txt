@@ -4,3 +4,4 @@ openai
 yt-dlp
 httpx
 tiktoken
+token-count
