@@ -254,7 +254,7 @@ def srt_to_json(srt_content):
 
     return entries
 
-def chunk_json(json_data, system_prompt, max_tokens=7000, model="gpt-4o"):
+def chunk_json(json_data, system_prompt, max_tokens=7800, model="gpt-4o"):
     enc = tiktoken.encoding_for_model(model)
     chunks = []
     current_chunk = []
@@ -355,8 +355,7 @@ def get_system_prompt():
     Translate all dialogues and narration from Turkish to Urdu.
     Ensure ranks, idioms, poetry, and cultural references are appropriately translated into Urdu.
     Account for potential spelling errors in the Turkish input.
-    The JSON object you will be translating is:
-    {input_json}
+    The JSON object you will be translating is provided in the user prompt.
     Respond with a JSON object in the same format that has the translated subtitles as lines.
 
     Detailed Instructions:
