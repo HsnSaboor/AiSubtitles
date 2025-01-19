@@ -308,7 +308,7 @@ def main():
     st.title("YouTube Turkish to Urdu Subtitle Translator")
 
     # Input for YouTube URL or file upload
-    option = st.radio("Choose input method:", ("YouTube URL", "Upload Subtitle File (SRT)") ,key=method1)
+    option = st.radio("Choose input method:", ("YouTube URL", "Upload Subtitle File (SRT)") ,key="method1")
 
     if option == "YouTube URL":
         youtube_url = st.text_input("Enter YouTube Video URL:")
@@ -441,7 +441,7 @@ def main():
     st.title("YouTube Turkish to Urdu Subtitle Translator")
 
     # Input for YouTube URL or file upload
-    option = st.radio("Choose input method:", ("YouTube URL", "Upload Subtitle File (SRT)") ,key=method2)
+    option = st.radio("Choose input method:", ("YouTube URL", "Upload Subtitle File (SRT)") ,key="method2")
 
     if option == "YouTube URL":
         youtube_url = st.text_input("Enter YouTube Video URL:")
