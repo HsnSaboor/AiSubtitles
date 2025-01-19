@@ -255,17 +255,19 @@ def srt_to_json(srt_content):
 
     return entries
 
+from token_count import TokenCount
+
 def chunk_json(json_data, system_prompt, max_tokens=7800, model="gpt-4o"):
-    enc = tiktoken.encoding_for_model(model)
+    tc = TokenCount(model_name=model)
     chunks = []
     current_chunk = []
     current_tokens = 0
 
-    user_prompt_template = "The JSON object you will be translating is: "
+    user_prompt_template = "Translate into Urdu: {chunk_input_json}"
 
     for entry in json_data:
-        entry_tokens = len(enc.encode(entry['text']))
-        if current_tokens + entry_tokens + len(enc.encode(system_prompt)) + len(enc.encode(user_prompt_template)) > max_tokens:
+        entry_tokens = tc.num_tokens_from_string(entry['text'])
+        if current_tokens + entry_tokens + tc.num_tokens_from_string(system_prompt) + tc.num_tokens_from_string(user_prompt_template) > max_tokens:
             chunks.append(current_chunk)
             current_chunk = []
             current_tokens = 0
@@ -279,7 +281,8 @@ def chunk_json(json_data, system_prompt, max_tokens=7800, model="gpt-4o"):
     # Recalculate chunks if total tokens exceed max_tokens
     recalculated_chunks = []
     for chunk in chunks:
-        chunk_tokens = len(enc.encode(json.dumps(chunk))) + len(enc.encode(system_prompt)) + len(enc.encode(user_prompt_template))
+        chunk_input_json = json.dumps(chunk)
+        chunk_tokens = tc.num_tokens_from_string(chunk_input_json) + tc.num_tokens_from_string(system_prompt) + tc.num_tokens_from_string(user_prompt_template)
         if chunk_tokens > max_tokens:
             recalculated_chunks.extend(chunk_json(chunk, system_prompt, max_tokens, model))
         else:
